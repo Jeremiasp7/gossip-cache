@@ -66,14 +66,39 @@ public class TcpStrategy implements CommunicationStrategy {
 
     @Override
     public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) {
+        
+        try (Socket socket = new Socket(destinationNode.getAddress(), destinationNode.getPort())) {
 
-        AppResponse response = new AppResponse();
+            ObjectOutputStream output = new ObjectOutputStream(socket.getOutputStream());
+            output.flush();
 
-        return response;
+            ObjectInputStream input = new ObjectInputStream(socket.getInputStream());
+
+            output.writeObject(request);
+
+            AppResponse response = (AppResponse) input.readObject();
+
+            return response;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            AppResponse response = new AppResponse("404", null, "Not Found");
+            return response;
+        }
+
     }
 
     @Override   
     public void sendGossip(GossipMessage message, NodeInfo destinationNode) {
 
+        try (Socket socket = new Socket(destinationNode.getAddress(), destinationNode.getPort())) {
+            
+            ObjectOutputStream output = new ObjectOutputStream(socket.getOutputStream());
+            output.flush();
+
+            output.writeObject(message);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
