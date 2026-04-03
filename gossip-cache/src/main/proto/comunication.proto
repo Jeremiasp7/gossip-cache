@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option java_package = "br.com.grpc"; 
+
+option java_multiple_files = true; // create the archives for each class
+
+
+message AppRequestProto { // my proto app request
+    string operation = 1; 
+    string key = 2;       
+    bytes value = 3;       
+}
+
+message AppResponseProto { // my proto app response
+    string status = 1;     
+    bytes value = 2;       
+    string message = 3;    
+}
+
+message GossipMessageProto { // my proto gossip message
+    string operation = 1;  
+    string key = 2;      
+    bytes value = 3;       
+}
+
+message Empty {} // every function nedds to return something
+
+
+service NodeService {
+    
+    rpc ProcessRequest (AppRequestProto) returns (AppResponseProto); // method that will be called by the gateway
+
+    rpc ProcessGossip (GossipMessageProto) returns (Empty); // assynchronus method for node conversation
+    
+}
