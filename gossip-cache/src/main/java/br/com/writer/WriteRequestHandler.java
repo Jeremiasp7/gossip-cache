@@ -3,6 +3,7 @@ package br.com.writer;
 import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.DictionaryStorage;
+import br.com.core.model.GossipMessage;
 import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 
@@ -35,6 +36,18 @@ public class WriteRequestHandler implements RequestHandler {
 
             AppResponse response = new AppResponse("405", null, "Method Not Allowed");
             return response;
+        }
+    }
+
+    @Override
+    public void handleGossip(GossipMessage gossip) { // process the gossips that comes from other writers or from the gateway
+        
+        AppRequest request = gossip.getData();
+
+        if (request.getOperation() == Operation.POST || request.getOperation() == Operation.PUT) {
+            dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
+        } else if (request.getOperation() == Operation.DELETE) {
+            dictionaryStorage.deleteLocalData(request.getKey());
         }
     }
     
