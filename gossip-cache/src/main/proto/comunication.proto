@@ -25,7 +25,7 @@ message NodeInfoProto { // my node info
 
 message GossipMessageProto { // my proto gossip message
     NodeInfoProto sourceNode = 1;
-    int64 sequenceNumber = 2;  
+    string sequenceNumber = 2;  
     AppRequestProto data = 3;     
     int32 hopCount = 4;      
 }

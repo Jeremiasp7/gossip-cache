@@ -87,7 +87,7 @@ public class GrpcMapper {
             .build();
 
         GossipMessageProto grpcGossip = GossipMessageProto.newBuilder()
-            .setSequenceNumber(gossip.getSequenceNumber())
+            .setSequenceNumber(gossip.getSequenceNumber().toString())
             .setHopCount(gossip.getHopCount())
             .setData(requestProto)
             .setSourceNode(grpcNode)
@@ -109,7 +109,7 @@ public class GrpcMapper {
 
         GossipMessage gossip = new GossipMessage(
             node, 
-            grpcGossip.getSequenceNumber(), 
+            UUID.fromString(grpcGossip.getSequenceNumber()), 
             request, 
             grpcGossip.getHopCount()
         );

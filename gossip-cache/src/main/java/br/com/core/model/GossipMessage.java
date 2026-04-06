@@ -1,16 +1,18 @@
 package br.com.core.model;
 
+import java.util.UUID;
+
 public class GossipMessage {
     
     private NodeInfo sourceNode; // the sender of the gossip
-    private long sequenceNumber; // versioning variable
+    private UUID sequenceNumber; // versioning variable
     private AppRequest data; // the content of operation
     private int hopCount; // a limit for the time of the message
 
     // class constructors
     public GossipMessage() {}
 
-    public GossipMessage(NodeInfo sourceNode, long sequenceNumber, AppRequest data, int hopCount) {
+    public GossipMessage(NodeInfo sourceNode, UUID sequenceNumber, AppRequest data, int hopCount) {
         this.sourceNode = sourceNode;
         this.sequenceNumber = sequenceNumber;
         this.data = data;
@@ -27,11 +29,11 @@ public class GossipMessage {
     }
 
 
-    public long getSequenceNumber() {
+    public UUID getSequenceNumber() {
         return sequenceNumber;
     }
 
-    public void setSequenceNumber(long sequenceNumber) {
+    public void setSequenceNumber(UUID sequenceNumber) {
         this.sequenceNumber = sequenceNumber;
     }
 
