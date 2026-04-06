@@ -7,11 +7,11 @@ import br.com.core.model.GossipMessage;
 import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 
-public class WriteRequestHandler implements RequestHandler {
+public class WriterRequestHandler implements RequestHandler {
 
     private DictionaryStorage dictionaryStorage;
 
-    public WriteRequestHandler(DictionaryStorage storage) {
+    public WriterRequestHandler(DictionaryStorage storage) {
         this.dictionaryStorage = storage;
     }
     

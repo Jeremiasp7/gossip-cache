@@ -12,10 +12,8 @@ public class MembershipList {
     
     private NodeInfo localNode; // the node have to known who he is
     private ConcurrentHashMap<UUID, NodeInfo> activeNodes; // routing table
-
-    public MembershipList() {}
     
-    public MembershipList(NodeInfo localNode, ConcurrentHashMap<UUID, NodeInfo> activeNodes) {
+    public MembershipList(NodeInfo localNode) {
         this.localNode = localNode;
         this.activeNodes = new ConcurrentHashMap<>();
 
