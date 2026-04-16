@@ -26,42 +26,82 @@ public class UdpStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public void startListening(int port) { // udp protocol for listening requests
+    public void startListening(int port) { 
 
         ExecutorService executor = Executors.newFixedThreadPool(16);
 
-        try (DatagramSocket datagramSocket = new DatagramSocket(port)) { // udp datagram socket
+        try (DatagramSocket datagramSocket = new DatagramSocket(port)) { 
             System.out.println("Servidor UDP escutando na porta: " + port);
 
             while (true) {
                 
-                byte[] inputBytes = new byte[8192]; // message size
+                byte[] inputBytes = new byte[8192]; 
                 DatagramPacket inputPacket = new DatagramPacket(inputBytes, inputBytes.length);
 
                 datagramSocket.receive(inputPacket);
 
-                executor.submit(() -> { // execution of the jobs in the threads
-                    try { // the message comes via datagram and a response is send
-                        ByteArrayInputStream byteInputStream = new ByteArrayInputStream(inputPacket.getData(), 
-                            0, inputPacket.getLength()
-                        );
-                        ObjectInputStream input = new ObjectInputStream(byteInputStream);
+                executor.submit(() -> {
+                    try { 
+                        byte[] inputData = inputPacket.getData();
+                        int offset = inputPacket.getOffset();
+                        int length = inputPacket.getLength();
 
-                        AppRequest request = (AppRequest) input.readObject();
+                        byte magicByte = inputData[offset];
+                        AppRequest request = null;
+                        Object receivedObject = null;
+                        
+                        boolean isJMeterText = false; 
+                        boolean isGossip = false;
+                        if (magicByte == (byte) -84) { 
+                            ByteArrayInputStream byteInputStream = new ByteArrayInputStream(inputData, offset, length);
+                            ObjectInputStream input = new ObjectInputStream(byteInputStream);
+                            
+                            receivedObject = input.readObject();
+
+                            if (receivedObject instanceof AppRequest) {
+                                request = (AppRequest) receivedObject;
+                            } else if (receivedObject instanceof GossipMessage) {
+                                isGossip = true;
+                            }
+                            
+                        } else {
+                            isJMeterText = true;
+                            String text = new String(inputData, offset, length).trim();
+                            String[] parts = text.split(","); 
+                            
+                            br.com.core.model.Operation op = br.com.core.model.Operation.valueOf(parts[0].trim());
+                            String key = parts.length > 1 ? parts[1].trim() : null;
+                            byte[] value = parts.length > 2 ? parts[2].trim().getBytes() : null;
+                            
+                            request = new AppRequest(op, key, value);
+                        }
+
+                        if (isGossip) {
+                            GossipMessage gossip = (GossipMessage) receivedObject;
+                            handler.handleGossip(gossip);
+                            return; 
+                        }
+
                         AppResponse response = handler.handleRequest(request);
 
-                        ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
-                        ObjectOutputStream output = new ObjectOutputStream(byteOutputStream);
-                        output.writeObject(response);
-                        output.flush();
-
-                        byte[] outputBytes = byteOutputStream.toByteArray();
+                        byte[] outputBytes;
+                        
+                        if (isJMeterText) {
+                            String responseText = response.getStatus() + " - " + response.getMessage();
+                            outputBytes = responseText.getBytes();
+                        } else {
+                            ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
+                            ObjectOutputStream output = new ObjectOutputStream(byteOutputStream);
+                            output.writeObject(response);
+                            output.flush();
+                            outputBytes = byteOutputStream.toByteArray();
+                        }
 
                         DatagramPacket outputPacket = new DatagramPacket(outputBytes, outputBytes.length, 
                             inputPacket.getAddress(), inputPacket.getPort()
                         );
-
                         datagramSocket.send(outputPacket);
+
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -73,13 +113,12 @@ public class UdpStrategy implements CommunicationStrategy {
     } 
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // send a udp request and waits a synchronous response
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { 
 
         try (DatagramSocket socket = new DatagramSocket()) {
 
             socket.setSoTimeout(5000); 
 
-            // send the request
             ByteArrayOutputStream byteOutput = new ByteArrayOutputStream();
             ObjectOutputStream objectOutput = new ObjectOutputStream(byteOutput);
 
@@ -94,7 +133,6 @@ public class UdpStrategy implements CommunicationStrategy {
 
             socket.send(outputPacket);
 
-            // receive the response
             byte[] inputBytes = new byte[8192];
             DatagramPacket inputPacket = new DatagramPacket(inputBytes, inputBytes.length);
 
@@ -120,7 +158,7 @@ public class UdpStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { // when a node is changed, a gossip is send
+    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { 
 
         try (DatagramSocket socket = new DatagramSocket()) {
 

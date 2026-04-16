@@ -16,84 +16,97 @@ import br.com.grpc.NodeInfoProto;
 
 public class GrpcMapper {
     
-    public AppRequestProto requestToGrpc(AppRequest request) { // converting a app request in a app request proto, for grpc
+    public AppRequestProto requestToGrpc(AppRequest request) { 
         
         AppRequestProto.Builder requestGrpcBuilder = AppRequestProto.newBuilder();
 
-        requestGrpcBuilder.setOperation(request.getOperation().toString());
-        requestGrpcBuilder.setKey(request.getKey());
+        // 🔥 PROTEÇÃO CONTRA NULLS (Essencial para os Heartbeats)
+        if (request.getOperation() != null) {
+            requestGrpcBuilder.setOperation(request.getOperation().toString());
+        }
+        
+        if (request.getKey() != null) {
+            requestGrpcBuilder.setKey(request.getKey());
+        }
 
         if (request.getValue() != null) {
             ByteString convertBytes = ByteString.copyFrom(request.getValue());
             requestGrpcBuilder.setValue(convertBytes);
         }
 
-        AppRequestProto grpcRequest = requestGrpcBuilder.build();
-
-        return grpcRequest;
+        return requestGrpcBuilder.build();
     }
 
-    public AppRequest grpcToRequest(AppRequestProto grpcRequest) { // converting a app request proto grpc in a app request
+    public AppRequest grpcToRequest(AppRequestProto grpcRequest) { 
 
-        Operation operation = Operation.valueOf(grpcRequest.getOperation());
-        String key = grpcRequest.getKey();
+        Operation operation = null;
+        if (!grpcRequest.getOperation().isEmpty()) {
+            operation = Operation.valueOf(grpcRequest.getOperation());
+        }
+        
+        String key = grpcRequest.getKey().isEmpty() ? null : grpcRequest.getKey();
         ByteString bytes = grpcRequest.getValue();
 
-        byte[] convertBytes = bytes.isEmpty() ? null: bytes.toByteArray();
+        byte[] convertBytes = bytes.isEmpty() ? null : bytes.toByteArray();
 
-        AppRequest request = new AppRequest(operation, key, convertBytes);
-
-        return request;
+        return new AppRequest(operation, key, convertBytes);
     }
 
     public AppResponseProto responseToGrpc(AppResponse response) {
 
         AppResponseProto.Builder responseGrpcBuilder = AppResponseProto.newBuilder();
 
-        responseGrpcBuilder.setStatus(response.getStatus());
-        responseGrpcBuilder.setMessage(response.getMessage());
+        if (response.getStatus() != null) {
+            responseGrpcBuilder.setStatus(response.getStatus());
+        }
+        
+        if (response.getMessage() != null) {
+            responseGrpcBuilder.setMessage(response.getMessage());
+        }
 
         if (response.getValue() != null) {
             ByteString convertBytes = ByteString.copyFrom(response.getValue());
             responseGrpcBuilder.setValue(convertBytes);
         }
 
-        AppResponseProto grpcResponse = responseGrpcBuilder.build();
-
-        return grpcResponse;
+        return responseGrpcBuilder.build();
     }
 
     public AppResponse grpcToResponse(AppResponseProto grpcResponse) {
 
-        String status = grpcResponse.getStatus();
-        String message = grpcResponse.getMessage();
+        String status = grpcResponse.getStatus().isEmpty() ? null : grpcResponse.getStatus();
+        String message = grpcResponse.getMessage().isEmpty() ? null : grpcResponse.getMessage();
         ByteString bytes = grpcResponse.getValue();
 
-        byte[] convertBytes = bytes.isEmpty() ? null: bytes.toByteArray();
+        byte[] convertBytes = bytes.isEmpty() ? null : bytes.toByteArray();
 
-        AppResponse response = new AppResponse(status, convertBytes, message);
-
-        return response;
+        return new AppResponse(status, convertBytes, message);
     }
 
     public GossipMessageProto gossipToGrpc(GossipMessage gossip) {
 
         AppRequestProto requestProto = requestToGrpc(gossip.getData());
 
-        NodeInfoProto grpcNode = NodeInfoProto.newBuilder()
-            .setAddress(gossip.getSourceNode().getAddress())
-            .setPort(gossip.getSourceNode().getPort())
-            .setId(gossip.getSourceNode().getSequenceNumber().toString())
-            .build();
+        NodeInfoProto.Builder grpcNodeBuilder = NodeInfoProto.newBuilder()
+            .setPort(gossip.getSourceNode().getPort());
+            
+        if (gossip.getSourceNode().getAddress() != null) {
+            grpcNodeBuilder.setAddress(gossip.getSourceNode().getAddress());
+        }
+        if (gossip.getSourceNode().getSequenceNumber() != null) {
+            grpcNodeBuilder.setId(gossip.getSourceNode().getSequenceNumber().toString());
+        }
 
-        GossipMessageProto grpcGossip = GossipMessageProto.newBuilder()
-            .setSequenceNumber(gossip.getSequenceNumber().toString())
+        GossipMessageProto.Builder grpcGossipBuilder = GossipMessageProto.newBuilder()
             .setHopCount(gossip.getHopCount())
             .setData(requestProto)
-            .setSourceNode(grpcNode)
-            .build();
+            .setSourceNode(grpcNodeBuilder.build());
 
-        return grpcGossip;
+        if (gossip.getSequenceNumber() != null) {
+            grpcGossipBuilder.setSequenceNumber(gossip.getSequenceNumber().toString());
+        }
+
+        return grpcGossipBuilder.build();
     }
 
     public GossipMessage grpcToGossip(GossipMessageProto grpcGossip) {
@@ -107,14 +120,11 @@ public class GrpcMapper {
             System.currentTimeMillis()
         );
 
-        GossipMessage gossip = new GossipMessage(
+        return new GossipMessage(
             node, 
             UUID.fromString(grpcGossip.getSequenceNumber()), 
             request, 
             grpcGossip.getHopCount()
         );
-
-        return gossip;
     }
-
 }

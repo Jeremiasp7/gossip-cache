@@ -1,5 +1,6 @@
 package br.com.core.network;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -23,22 +24,31 @@ import io.grpc.stub.StreamObserver;
 public class GrpcStrategy implements CommunicationStrategy {
     
     private RequestHandler handler;
-    
     private GrpcMapper grpcMapper;
+
+    private ConcurrentHashMap<String, ManagedChannel> channelCache = new ConcurrentHashMap<>();
 
     public GrpcStrategy(RequestHandler handler, GrpcMapper grpcMapper) {
         this.handler = handler;
         this.grpcMapper = grpcMapper;
     }
 
+    private ManagedChannel getOrCreateChannel(NodeInfo node) {
+        String key = node.getAddress() + ":" + node.getPort();
+        return channelCache.computeIfAbsent(key, k -> 
+            ManagedChannelBuilder.forAddress(node.getAddress(), node.getPort())
+                .usePlaintext()
+                .build()
+        );
+    }
+
     @Override
-    public void startListening(int port) { // grpc protocol for listening requests
+    public void startListening(int port) { 
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
 
-        executor.submit(() -> { // only a one thread, the grpc manage the rest asynchronously
-                    
-            try { // a server is created and he listen in a determinate port
+        executor.submit(() -> { 
+            try { 
                 Server server = ServerBuilder.forPort(port)
                     .addService(new NodeServiceImpl(handler, grpcMapper))
                     .build();
@@ -54,71 +64,50 @@ public class GrpcStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // the way that grpc send requests
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { 
 
-        ManagedChannel channel = null;
+        ManagedChannel channel = getOrCreateChannel(destinationNode);
 
-        try { // a channel is created for send the requests; when a request comes, a response is send
-            channel = ManagedChannelBuilder.forAddress(
-                destinationNode.getAddress(), 
-                destinationNode.getPort()
-            ).usePlaintext().build();
-
+        try { 
             NodeServiceGrpc.NodeServiceBlockingStub stub = NodeServiceGrpc.newBlockingStub(channel);
 
             AppRequestProto requestProto = grpcMapper.requestToGrpc(request);
             AppResponseProto responseProto = stub.processRequest(requestProto);
 
-            AppResponse response = grpcMapper.grpcToResponse(responseProto);
-
-            return response;
+            return grpcMapper.grpcToResponse(responseProto);
 
         } catch (StatusRuntimeException e) {
             System.err.println("Falha na comunicação gRPC com o nó " + destinationNode.getPort() + ": " + e.getStatus().getDescription());
-            
-            return new AppResponse("503", null, "Service Unavailable");
-        }  finally {
-            if (channel != null && !channel.isShutdown()) {
-                channel.shutdown();
-            }
-        }
+            return new AppResponse("404", null, "Not Found");
+        } 
     }
 
     @Override
-    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { // the way that grpc send gossips
+    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { 
 
-        final ManagedChannel channel = ManagedChannelBuilder.forAddress(
-                                            destinationNode.getAddress(), 
-                                            destinationNode.getPort()
-                                        ).usePlaintext().build();
+        ManagedChannel channel = getOrCreateChannel(destinationNode);
 
-        try { // again, a channel is created for the communication; but here, doesn't matter is the node receive the message
-            
+        try { 
             NodeServiceGrpc.NodeServiceStub stub = NodeServiceGrpc.newStub(channel);
 
             GossipMessageProto gossipProto = grpcMapper.gossipToGrpc(message);
 
-            stub.processGossip(gossipProto, new StreamObserver<Empty>() { // the channel is closed only if the communication ends
+            stub.processGossip(gossipProto, new StreamObserver<Empty>() { 
                 @Override
                 public void onNext(Empty value) {}
 
                 @Override
                 public void onError(Throwable t) {
-                    channel.shutdown();
+                    System.err.println("Aviso gRPC: Falha na fofoca silenciosa - " + t.getMessage());
                 }
 
                 @Override
                 public void onCompleted() {
-                    channel.shutdown();
                 }
             });
 
         } catch (Exception e) {
             System.err.println("Erro interno ao preparar fofoca: " + e.getMessage());
-            if (channel != null && !channel.isShutdown()) {
-                channel.shutdown();
-            }
         } 
     } 
-    
 }

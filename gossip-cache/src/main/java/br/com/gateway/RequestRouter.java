@@ -22,6 +22,8 @@ public class RequestRouter {
         
         Operation operation = request.getOperation();
 
+        System.out.println("O Gateway recebeu " + operation + " para a chave '" + request.getKey());
+
         switch (operation) {
             case GET:
                 return communicationStrategy.sendRequest(request, serviceRegistry.getReader());

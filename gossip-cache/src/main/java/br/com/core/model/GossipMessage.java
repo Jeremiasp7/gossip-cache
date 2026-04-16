@@ -1,8 +1,9 @@
 package br.com.core.model;
 
+import java.io.Serializable;
 import java.util.UUID;
 
-public class GossipMessage {
+public class GossipMessage implements Serializable {
     
     private NodeInfo sourceNode; // the sender of the gossip
     private UUID sequenceNumber; // versioning variable

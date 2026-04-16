@@ -12,10 +12,10 @@ import br.com.core.network.CommunicationStrategy;
 
 public class GossipWorker {
     
-    private MembershipList membershipList; // list of nodes
-    private CommunicationStrategy communicationStrategy; // the strategy that the worker will use to operate
-    private NodeInfo localNode; // the node have to known who he is
-    private ScheduledExecutorService scheduler; // thread pool of java specialized in execute things every X seconds
+    private MembershipList membershipList; 
+    private CommunicationStrategy communicationStrategy; 
+    private NodeInfo localNode; 
+    private ScheduledExecutorService scheduler; 
 
     public GossipWorker(MembershipList membershipList, CommunicationStrategy communicationStrategy, NodeInfo localNode,
             ScheduledExecutorService scheduler) {
@@ -25,7 +25,7 @@ public class GossipWorker {
         this.scheduler = scheduler;
     }
 
-    public void spreadGossip(GossipMessage message) { // the leo dias method
+    public void spreadGossip(GossipMessage message) { 
 
         if (message.getHopCount() <= 0) {
             return;
@@ -40,27 +40,26 @@ public class GossipWorker {
         }
     }
 
-    public void startBackgroundTest() { // the infinit gossip loop for work
+    public void startBackgroundTest() { 
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                membershipList.removeDeadNodes();
+                membershipList.removeDeadNodes(); 
                 localNode.setLastHeartbeat(System.currentTimeMillis());
 
                 AppRequest request = new AppRequest(Operation.GET, null, null);
                 GossipMessage gossip = new GossipMessage(localNode, localNode.getSequenceNumber(), request, 2);
-
                 spreadGossip(gossip);
+
             } catch(Exception e) {
                 e.printStackTrace();
             }
         }, 5, 5, TimeUnit.SECONDS);
     }
 
-    public void stop() { // turn of the worker
+    public void stop() { 
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
         }
     }
-
 }

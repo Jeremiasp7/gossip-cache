@@ -1,8 +1,9 @@
 package br.com.core.model;
 
+import java.io.Serializable;
 import java.util.UUID;
 
-public class NodeInfo {
+public class NodeInfo implements Serializable {
     
     private UUID id; // the node identifier
     private String address; // hostname of the node

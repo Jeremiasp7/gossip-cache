@@ -56,6 +56,7 @@ public class HttpParser {
         int contentLength = value.getBytes(StandardCharsets.UTF_8).length;
 
         String httpResponse = "HTTP/1.1 " + response.getStatus() + " " + response.getMessage() + "\r\n" +
+                              "Connection: close\r\n" +
                               "Content-Length: " + contentLength + "\r\n" +
                               "\r\n" + 
                               value;
