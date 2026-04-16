@@ -33,7 +33,7 @@ public class GrpcStrategy implements CommunicationStrategy {
         this.grpcMapper = grpcMapper;
     }
 
-    private ManagedChannel getOrCreateChannel(NodeInfo node) {
+    private ManagedChannel getOrCreateChannel(NodeInfo node) { // open the channel only once and send all for him
         String key = node.getAddress() + ":" + node.getPort();
         return channelCache.computeIfAbsent(key, k -> 
             ManagedChannelBuilder.forAddress(node.getAddress(), node.getPort())
@@ -64,7 +64,7 @@ public class GrpcStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { 
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // blocking thread
 
         ManagedChannel channel = getOrCreateChannel(destinationNode);
 
@@ -83,7 +83,7 @@ public class GrpcStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { 
+    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { // gossip without blocking
 
         ManagedChannel channel = getOrCreateChannel(destinationNode);
 

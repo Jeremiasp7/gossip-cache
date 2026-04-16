@@ -33,7 +33,7 @@ message GossipMessageProto { // my proto gossip message
 message Empty {} // every function nedds to return something
 
 
-service NodeService {
+service NodeService { // unary grpc
     
     rpc ProcessRequest (AppRequestProto) returns (AppResponseProto); // method that will be called by the gateway
 

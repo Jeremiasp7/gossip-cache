@@ -52,7 +52,7 @@ public class UdpStrategy implements CommunicationStrategy {
                         
                         boolean isJMeterText = false; 
                         boolean isGossip = false;
-                        if (magicByte == (byte) -84) { 
+                        if (magicByte == (byte) -84) { // any serialized object starts with byte -84 -> gateway or writer
                             ByteArrayInputStream byteInputStream = new ByteArrayInputStream(inputData, offset, length);
                             ObjectInputStream input = new ObjectInputStream(byteInputStream);
                             
@@ -64,7 +64,7 @@ public class UdpStrategy implements CommunicationStrategy {
                                 isGossip = true;
                             }
                             
-                        } else {
+                        } else { // jmeter send requests
                             isJMeterText = true;
                             String text = new String(inputData, offset, length).trim();
                             String[] parts = text.split(","); 
@@ -86,10 +86,10 @@ public class UdpStrategy implements CommunicationStrategy {
 
                         byte[] outputBytes;
                         
-                        if (isJMeterText) {
+                        if (isJMeterText) { // form a response from the jmeter request
                             String responseText = response.getStatus() + " - " + response.getMessage();
                             outputBytes = responseText.getBytes();
-                        } else {
+                        } else { // work with the binary response that comes from gateway
                             ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
                             ObjectOutputStream output = new ObjectOutputStream(byteOutputStream);
                             output.writeObject(response);
@@ -113,7 +113,7 @@ public class UdpStrategy implements CommunicationStrategy {
     } 
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { 
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // gateway use this method for ask data to the writer or reader
 
         try (DatagramSocket socket = new DatagramSocket()) {
 
@@ -158,7 +158,7 @@ public class UdpStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { 
+    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { // the writer serializes the gossip message and send to the reader
 
         try (DatagramSocket socket = new DatagramSocket()) {
 

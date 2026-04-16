@@ -16,12 +16,11 @@ import br.com.grpc.NodeInfoProto;
 
 public class GrpcMapper {
     
-    public AppRequestProto requestToGrpc(AppRequest request) { 
+    public AppRequestProto requestToGrpc(AppRequest request) { // the translate class, comunicates the application with the grpc
         
         AppRequestProto.Builder requestGrpcBuilder = AppRequestProto.newBuilder();
 
-        // 🔥 PROTEÇÃO CONTRA NULLS (Essencial para os Heartbeats)
-        if (request.getOperation() != null) {
+        if (request.getOperation() != null) { // null protection for dont break the protobuf serialization
             requestGrpcBuilder.setOperation(request.getOperation().toString());
         }
         

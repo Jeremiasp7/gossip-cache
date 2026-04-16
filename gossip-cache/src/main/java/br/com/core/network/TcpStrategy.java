@@ -43,13 +43,13 @@ public class TcpStrategy implements CommunicationStrategy {
                         try (InputStream is = connection.getInputStream();
                              OutputStream os = connection.getOutputStream()) {
                             
-                            PushbackInputStream pbis = new PushbackInputStream(is, 1);
+                            PushbackInputStream pbis = new PushbackInputStream(is, 1); // spy the first byte of the packet
                             int firstByteInt = pbis.read();
                             
                             if (firstByteInt != -1) {
                                 byte magicByte = (byte) firstByteInt;
 
-                                if (magicByte == (byte) -84) {
+                                if (magicByte == (byte) -84) { // any serialized object starts with byte -84 -> gateway or writer
                                     pbis.unread(firstByteInt);
                                     
                                     ObjectOutputStream output = new ObjectOutputStream(os);
@@ -64,14 +64,14 @@ public class TcpStrategy implements CommunicationStrategy {
                                         AppResponse response = handler.handleRequest(request);
                                         
                                         output.writeObject(response);
-                                        output.flush(); // 🔥 Garante envio
+                                        output.flush(); 
                                         
                                     } else if (receivedObject instanceof GossipMessage) {
                                         GossipMessage gossip = (GossipMessage) receivedObject;
                                         handler.handleGossip(gossip);
                                     }
                                     
-                                } else {
+                                } else { // jmeter send requests, uses the http parser for threat the request
                                     pbis.unread(firstByteInt); 
                                     
                                     byte[] inputBytes = new byte[8192];
@@ -87,16 +87,15 @@ public class TcpStrategy implements CommunicationStrategy {
                                             
                                             byte[] outputBytes = responseString.getBytes(StandardCharsets.UTF_8);
                                             os.write(outputBytes);
-                                            os.flush(); // 🔥 Garante envio
+                                            os.flush(); 
 
                                             connection.shutdownOutput(); 
                                             Thread.sleep(10); 
-                                            while (is.available() > 0) {
+                                            while (is.available() > 0) { // cclose the connection in a clean way
                                                 is.read();
                                             }
 
                                         } catch (Exception e) {
-                                            System.err.println("💥 ERRO NO PARSER HTTP: " + e.getMessage());
                                             e.printStackTrace();
                                         }
                                     }
@@ -123,7 +122,7 @@ public class TcpStrategy implements CommunicationStrategy {
     }
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { 
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // gateway use this method for ask data to the writer or reader
         try (Socket socket = new Socket(destinationNode.getAddress(), destinationNode.getPort())) {
             socket.setSoTimeout(5000); 
 
