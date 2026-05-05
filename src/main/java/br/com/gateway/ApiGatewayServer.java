@@ -1,8 +1,6 @@
 package br.com.gateway;
 
 import java.util.UUID;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import br.com.core.model.NodeInfo;
 import br.com.core.network.CommunicationStrategy;
@@ -16,9 +14,6 @@ public class ApiGatewayServer {
     
     public static void main(String[] args) {
 
-        Logger.getLogger("io.grpc").setLevel(Level.WARNING);
-        Logger.getLogger("io.netty").setLevel(Level.WARNING);
-
         try {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1]; // UDP, TCP or gRPC
@@ -27,9 +22,13 @@ public class ApiGatewayServer {
             
             NodeInfo nodeA = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9001, 0);
             NodeInfo nodeB = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9002, 0);
+            NodeInfo nodeC = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9003, 0);
+            NodeInfo nodeD = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9004, 0);
 
             registry.registerWriter(nodeA);
             registry.registerReader(nodeB);
+            registry.registerWriter(nodeC);
+            registry.registerReader(nodeD);
 
             RequestRouter requestRouter = new RequestRouter(registry);
             GatewayRequestHandler gatewayRequestHandler = new GatewayRequestHandler(requestRouter);
