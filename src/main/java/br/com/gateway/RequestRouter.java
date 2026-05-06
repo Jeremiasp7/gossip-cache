@@ -26,13 +26,13 @@ public class RequestRouter {
 
         switch (operation) {
             case GET:
-                return communicationStrategy.sendRequest(request, serviceRegistry.getReader());
+                return communicationStrategy.sendRequest(request, serviceRegistry.getReaders());
             
             case DELETE, POST, PUT:
-                if (serviceRegistry.getWriter() == null) {
+                if (serviceRegistry.getWriters() == null) {
                     return new AppResponse("503", null, "Serviço Indisponível - Nó não registrado");
                 }
-                return communicationStrategy.sendRequest(request, serviceRegistry.getWriter());
+                return communicationStrategy.sendRequest(request, serviceRegistry.getWriters());
         
             default:
                 return new AppResponse("400", null, "Operação não suportada");

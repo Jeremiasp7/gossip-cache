@@ -14,7 +14,7 @@ public class WriterRequestHandler implements RequestHandler {
 
     private DictionaryStorage dictionaryStorage;
     private GossipWorker gossipWorker;
-    private NodeInfo localNode;
+    private NodeInfo localNode; // maybe a problem explodes here
     private MembershipList membershipList;
 
     public WriterRequestHandler(DictionaryStorage storage, MembershipList membershipList) {
@@ -22,7 +22,6 @@ public class WriterRequestHandler implements RequestHandler {
         this.membershipList = membershipList;
     }
 
-    // Setters para quebrar a dependência circular na classe Main
     public void setGossipWorker(GossipWorker gossipWorker) {
         this.gossipWorker = gossipWorker;
     }

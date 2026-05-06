@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import br.com.core.model.NodeInfo;
 
@@ -12,13 +13,19 @@ public class MembershipList {
     
     private NodeInfo localNode; // the node have to known who he is
     private ConcurrentHashMap<UUID, NodeInfo> activeNodes; // routing table
+    private CopyOnWriteArrayList<NodeInfo> readerNodes; // readers list
+    private CopyOnWriteArrayList<NodeInfo> writerNodes; // writers list
+    private CopyOnWriteArrayList<NodeInfo> gatewayNodes; //gateways list
     
     public MembershipList(NodeInfo localNode) {
         this.localNode = localNode;
         this.activeNodes = new ConcurrentHashMap<>();
-
+        this.readerNodes = new CopyOnWriteArrayList<>();
+        this.writerNodes = new CopyOnWriteArrayList<>();
+        this.gatewayNodes = new CopyOnWriteArrayList<>();
         this.localNode.setLastHeartbeat(System.currentTimeMillis());
         this.activeNodes.put(localNode.getSequenceNumber(), localNode);
+        addNodeToTypedList(localNode);
     }
     
     public void updateNode(NodeInfo incomingNode) { // updating the node last heartbeat or putting him on the list
@@ -30,6 +37,28 @@ public class MembershipList {
         incomingNode.setLastHeartbeat(System.currentTimeMillis());
         
         activeNodes.put(incomingNode.getSequenceNumber(), incomingNode);
+        addNodeToTypedList(incomingNode);
+    }
+
+    private void addNodeToTypedList(NodeInfo node) {
+        removeNodeFromTypedList(node);
+        switch (node.getType()) {
+            case READER:
+                readerNodes.add(node);
+                break;
+            case WRITER:
+                writerNodes.add(node);
+                break;
+            case GATEWAY:
+                gatewayNodes.add(node);
+                break;
+        }
+    }
+
+    private void removeNodeFromTypedList(NodeInfo node) {
+        readerNodes.removeIf(n -> n.getSequenceNumber().equals(node.getSequenceNumber()));
+        writerNodes.removeIf(n -> n.getSequenceNumber().equals(node.getSequenceNumber()));
+        gatewayNodes.removeIf(n -> n.getSequenceNumber().equals(node.getSequenceNumber()));
     }
     
     public List<NodeInfo> getPeersToGossip(int numberOfPeers) { // getting a sublist of the nodes with the size of the number of peers
@@ -65,4 +94,15 @@ public class MembershipList {
         return activeNodes;
     }
     
+    public List<NodeInfo> getReaderNodes() {
+        return new ArrayList<>(readerNodes);
+    }
+
+    public List<NodeInfo> getWriterNodes() {
+        return new ArrayList<>(writerNodes);
+    }
+
+    public List<NodeInfo> getGatewayNodes() {
+        return new ArrayList<>(gatewayNodes);
+    }
 }

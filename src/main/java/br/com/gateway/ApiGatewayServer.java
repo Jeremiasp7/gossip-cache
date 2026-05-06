@@ -1,8 +1,13 @@
 package br.com.gateway;
 
+import java.net.InetAddress;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 
+import br.com.core.gossip.GossipWorker;
+import br.com.core.gossip.MembershipList;
 import br.com.core.model.NodeInfo;
+import br.com.core.model.NodeType;
 import br.com.core.network.CommunicationStrategy;
 import br.com.core.network.GrpcMapper;
 import br.com.core.network.GrpcStrategy;
@@ -18,18 +23,10 @@ public class ApiGatewayServer {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1]; // UDP, TCP or gRPC
             
-            ServiceRegistry registry = new ServiceRegistry();
-            
-            NodeInfo nodeA = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9001, 0);
-            NodeInfo nodeB = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9002, 0);
-            NodeInfo nodeC = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9003, 0);
-            NodeInfo nodeD = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9004, 0);
+            NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
+            MembershipList membershipList = new MembershipList(localNode);
 
-            registry.registerWriter(nodeA);
-            registry.registerReader(nodeB);
-            registry.registerWriter(nodeC);
-            registry.registerReader(nodeD);
-
+            ServiceRegistry registry = new ServiceRegistry(membershipList);
             RequestRouter requestRouter = new RequestRouter(registry);
             GatewayRequestHandler gatewayRequestHandler = new GatewayRequestHandler(requestRouter);
             CommunicationStrategy strategy = null;
@@ -52,8 +49,12 @@ public class ApiGatewayServer {
 
             requestRouter.setCommunicationStrategy(strategy);
 
+            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            gatewayRequestHandler.setMembershipList(membershipList);
+
             System.out.println("API Gateway no ar na porta " + gatewayPort + " roteando requisições via " + protocol.toUpperCase() + "!");
             strategy.startListening(gatewayPort);
+            worker.startBackgroundTest();
 
         } catch (Exception e) {
             System.err.println("Erro ao iniciar o API Gateway: " + e.getMessage());

@@ -9,15 +9,17 @@ public class NodeInfo implements Serializable {
     private String address; // hostname of the node
     private int port; // the port where the node is
     private long lastHeartbeat; // the last heartbeat of the node
+    private NodeType type;
 
     // class constructors
     public NodeInfo() {}
 
-    public NodeInfo(UUID id, String address, int port, long lastHeartbeat) {
+    public NodeInfo(UUID id, String address, int port, long lastHeartbeat, NodeType type) {
         this.id = id;
         this.address = address;
         this.port = port;
         this.lastHeartbeat = lastHeartbeat;
+        this.type = type;
     }
 
     //getters and setters
@@ -53,4 +55,11 @@ public class NodeInfo implements Serializable {
         this.lastHeartbeat = lastHeartbeat;
     }
     
+    public NodeType getType() {
+        return type;
+    }
+
+    public void setType(NodeType type) {
+        this.type = type;
+    }
 }

@@ -1,26 +1,39 @@
 package br.com.gateway;
 
+import java.util.List;
+import java.util.Random;
+
+import br.com.core.gossip.MembershipList;
 import br.com.core.model.NodeInfo;
 
 public class ServiceRegistry {
     
-    private NodeInfo nodeWriter;
-    private NodeInfo nodeReader;
+    private MembershipList membershipList;
+    private Random random;
 
-    public void registerReader(NodeInfo node) {
-        this.nodeReader = node;
+    public ServiceRegistry(MembershipList membershipList) {
+        this.membershipList = membershipList;
+        this.random = new Random();
     }
 
-    public void registerWriter(NodeInfo node) {
-        this.nodeWriter = node;
+    public NodeInfo getReaders() {
+        List<NodeInfo> readers = membershipList.getReaderNodes();
+        
+        if (readers.isEmpty()) {
+            return null;
+        }
+
+        return readers.get(random.nextInt(readers.size()));
     }
 
-    public NodeInfo getReader() {
-        return this.nodeReader;
-    }
+    public NodeInfo getWriters() {
+        List<NodeInfo> writers = membershipList.getWriterNodes();
 
-    public NodeInfo getWriter() {
-        return this.nodeWriter;
+        if (writers.isEmpty()) {
+            return null;
+        }
+
+        return writers.get(random.nextInt(writers.size()));
     }
     
 }

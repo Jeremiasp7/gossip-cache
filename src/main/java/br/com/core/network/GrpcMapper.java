@@ -8,6 +8,7 @@ import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
+import br.com.core.model.NodeType;
 import br.com.core.model.Operation;
 import br.com.grpc.AppRequestProto;
 import br.com.grpc.AppResponseProto;
@@ -87,7 +88,8 @@ public class GrpcMapper {
         AppRequestProto requestProto = requestToGrpc(gossip.getData());
 
         NodeInfoProto.Builder grpcNodeBuilder = NodeInfoProto.newBuilder()
-            .setPort(gossip.getSourceNode().getPort());
+            .setPort(gossip.getSourceNode().getPort())
+            .setType(gossip.getSourceNode().getType().toString());
             
         if (gossip.getSourceNode().getAddress() != null) {
             grpcNodeBuilder.setAddress(gossip.getSourceNode().getAddress());
@@ -116,7 +118,8 @@ public class GrpcMapper {
             UUID.fromString(grpcGossip.getSourceNode().getId()), 
             grpcGossip.getSourceNode().getAddress(), 
             grpcGossip.getSourceNode().getPort(), 
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            NodeType.valueOf(grpcGossip.getSourceNode().getType())
         );
 
         return new GossipMessage(

@@ -26,7 +26,6 @@ public class GossipWorker {
     }
 
     public void spreadGossip(GossipMessage message) { 
-
         if (message.getHopCount() <= 0) {
             return;
         }
@@ -36,7 +35,9 @@ public class GossipWorker {
         List<NodeInfo> list = membershipList.getPeersToGossip(1);
 
         for (NodeInfo nodeInfo : list) {
-            communicationStrategy.sendGossip(message, nodeInfo);
+            if (!nodeInfo.getSequenceNumber().equals(localNode.getSequenceNumber())) {
+                communicationStrategy.sendGossip(message, nodeInfo);
+            }
         }
     }
 

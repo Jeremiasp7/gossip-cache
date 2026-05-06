@@ -8,6 +8,7 @@ import br.com.core.gossip.GossipWorker;
 import br.com.core.gossip.MembershipList;
 import br.com.core.model.DictionaryStorage;
 import br.com.core.model.NodeInfo;
+import br.com.core.model.NodeType;
 import br.com.core.network.CommunicationStrategy;
 import br.com.core.network.GrpcMapper;
 import br.com.core.network.GrpcStrategy;
@@ -20,28 +21,27 @@ public class ReaderServer {
     public static void main(String[] args) {
             
         try  {
-
-            NodeInfo readerNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), Integer.parseInt(args[0]), 0);
-            NodeInfo writerNode = new NodeInfo(UUID.randomUUID(), "127.0.0.1", 9001, 0);
-
-            MembershipList membershipList = new MembershipList(readerNode);
-            membershipList.updateNode(writerNode);
             
+            int port = Integer.parseInt(args[0]);
+            String protocol = args[1];
+
+            NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), port, 0, NodeType.READER);
+            MembershipList membershipList = new MembershipList(localNode);
+
             DictionaryStorage dictionary = new DictionaryStorage();
             ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList);
-
             CommunicationStrategy strategy;
 
-            if (args[1].equalsIgnoreCase("UDP")) {
+            if (protocol.equalsIgnoreCase("UDP")) {
                 UdpStrategy udp = new UdpStrategy(readHandler);
                 strategy = udp;
 
-            } else if (args[1].equalsIgnoreCase("TCP")) {
+            } else if (protocol.equalsIgnoreCase("TCP")) {
                 HttpParser httpParser = new HttpParser();
                 TcpStrategy tcp = new TcpStrategy(readHandler, httpParser);
                 strategy = tcp;
 
-            } else if (args[1].equalsIgnoreCase("GRPC")) {
+            } else if (protocol.equalsIgnoreCase("GRPC")) {
                 GrpcMapper grpcMapper = new GrpcMapper();
                 GrpcStrategy grpc = new GrpcStrategy(readHandler, grpcMapper);
                 strategy = grpc;
@@ -51,12 +51,13 @@ public class ReaderServer {
                 return;
             }
 
-            GossipWorker worker = new GossipWorker(membershipList, strategy, readerNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            readHandler.setGossipWorker(worker);
+            readHandler.setLocalNode(localNode);
             
             System.out.println("Uma instância do Reader acaba de subir na porta " + args[0] + "!");
             strategy.startListening(Integer.parseInt(args[0]));
             worker.startBackgroundTest();
-
 
         } catch (Exception e) {
             e.printStackTrace();
