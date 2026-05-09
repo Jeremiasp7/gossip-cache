@@ -19,14 +19,25 @@ import br.com.core.network.UdpStrategy;
 public class ReaderServer {
 
     public static void main(String[] args) {
-            
+
         try  {
-            
+
             int port = Integer.parseInt(args[0]);
             String protocol = args[1];
+            Integer gatewayPort = null;
+
+            if (args.length > 2) {
+                gatewayPort = Integer.parseInt(args[2]);
+            }
 
             NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), port, 0, NodeType.READER);
             MembershipList membershipList = new MembershipList(localNode);
+
+            if (gatewayPort != null) {
+                NodeInfo gatewayNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
+                membershipList.updateNode(gatewayNode);
+                System.out.println("Gateway descoberto na porta " + gatewayPort);
+            }
 
             DictionaryStorage dictionary = new DictionaryStorage();
             ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList);
@@ -51,12 +62,14 @@ public class ReaderServer {
                 return;
             }
 
-            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            final CommunicationStrategy finalStrategy = strategy;
+            GossipWorker worker = new GossipWorker(membershipList, finalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
-            
-            System.out.println("Uma instância do Reader acaba de subir na porta " + args[0] + "!");
-            strategy.startListening(Integer.parseInt(args[0]));
+
+            final int listenPort = port;
+            System.out.println("Uma instância do Reader acaba de subir na porta " + listenPort + "!");
+            new Thread(() -> finalStrategy.startListening(listenPort)).start();
             worker.startBackgroundTest();
 
         } catch (Exception e) {

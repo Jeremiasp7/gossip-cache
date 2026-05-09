@@ -53,21 +53,23 @@ public class ReadRequestHandler implements RequestHandler{
     }
 
     @Override
-    public void handleGossip(GossipMessage gossip) { 
+    public void handleGossip(GossipMessage gossip) {
 
-        NodeInfo sender = gossip.getSourceNode(); 
+        NodeInfo sender = gossip.getSourceNode();
 
         if (localNode != null && sender.getSequenceNumber().equals(localNode.getSequenceNumber())) {
-            return; 
+            return;
         }
-        System.out.println("[" + localNode.getType() + " na porta " + localNode.getPort() + "] Recebeu fofoca de: " + sender.getPort());
+        System.out.println("[Reader na porta " + localNode.getPort() + "] Recebeu gossip de " + sender.getType() + " na porta " + sender.getPort());
+        System.out.flush();
 
         membershipList.updateNode(sender);
         AppRequest request = gossip.getData();
-        System.out.println("O Reader acaba de salvar a chave: '" + request.getKey() + "'!");
 
         if (request != null && request.getKey() != null) {
-            System.out.println("O Writer acaba de salvar a chave: '" + request.getKey() + "'!");
+            System.out.println("[Reader na porta " + localNode.getPort() + "] Salvando chave '" + request.getKey() + "' com valor '" + (request.getValue() != null ? new String(request.getValue()) : "null") + "' do gossip");
+            System.out.flush();
+
             if (request.getOperation() == Operation.POST || request.getOperation() == Operation.PUT) {
                 dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
             } else if (request.getOperation() == Operation.DELETE) {
@@ -75,7 +77,8 @@ public class ReadRequestHandler implements RequestHandler{
             }
 
             if (gossipWorker != null && gossip.getHopCount() > 0) {
-                System.out.println("Reader propagando fofoca da chave: "+request.getKey() + " para a rede");
+                System.out.println("[Reader na porta " + localNode.getPort() + "] Propagando gossip da chave '" + request.getKey() + "' para a rede (hopCount: " + gossip.getHopCount() + ")");
+                System.out.flush();
                 gossipWorker.spreadGossip(gossip);
             }
         }

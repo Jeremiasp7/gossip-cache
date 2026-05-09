@@ -76,12 +76,12 @@ public class MembershipList {
     }
 
 
-    public void removeDeadNodes() { // remove a node if hist last heartbeat it happend more than 10 seconds ago
+    public void removeDeadNodes() { // remove a node if hist last heartbeat it happend more than 30 seconds ago
 
         long tempoAtual = System.currentTimeMillis();
 
         activeNodes.forEach((id, node) -> {
-            if (tempoAtual - node.getLastHeartbeat() > 10000) {
+            if (tempoAtual - node.getLastHeartbeat() > 30000) {
                 if (!node.getSequenceNumber().equals(localNode.getSequenceNumber())) {
                     activeNodes.remove(id);
                     System.out.println("Nó " + node.getPort() + " foi removido por inatividade.");

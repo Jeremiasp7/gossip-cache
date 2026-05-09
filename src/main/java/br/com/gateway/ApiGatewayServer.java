@@ -22,7 +22,7 @@ public class ApiGatewayServer {
         try {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1]; // UDP, TCP or gRPC
-            
+
             NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
             MembershipList membershipList = new MembershipList(localNode);
 
@@ -33,27 +33,30 @@ public class ApiGatewayServer {
 
             if (protocol.equalsIgnoreCase("UDP")) {
                 strategy = new UdpStrategy(gatewayRequestHandler);
-                
+
             } else if (protocol.equalsIgnoreCase("TCP")) {
                 HttpParser httpParser = new HttpParser();
                 strategy = new TcpStrategy(gatewayRequestHandler, httpParser);
-                
+
             } else if (protocol.equalsIgnoreCase("GRPC")) {
                 GrpcMapper grpcMapper = new GrpcMapper();
                 strategy = new GrpcStrategy(gatewayRequestHandler, grpcMapper);
-                
+
             } else {
                 System.out.println("Método inválido. Escolha UDP, TCP ou GRPC.");
                 return;
             }
 
+            final CommunicationStrategy finalStrategy = strategy;
             requestRouter.setCommunicationStrategy(strategy);
 
-            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(membershipList, finalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
             gatewayRequestHandler.setMembershipList(membershipList);
+            gatewayRequestHandler.setGossipWorker(worker);
 
-            System.out.println("API Gateway no ar na porta " + gatewayPort + " roteando requisições via " + protocol.toUpperCase() + "!");
-            strategy.startListening(gatewayPort);
+            final int port = gatewayPort;
+            System.out.println("API Gateway no ar na porta " + port + " roteando requisições via " + protocol.toUpperCase() + "!");
+            new Thread(() -> finalStrategy.startListening(port)).start();
             worker.startBackgroundTest();
 
         } catch (Exception e) {

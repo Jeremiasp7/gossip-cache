@@ -31,9 +31,9 @@ public class WriterRequestHandler implements RequestHandler {
     }
     
     @Override
-    public AppResponse handleRequest(AppRequest request) { 
+    public AppResponse handleRequest(AppRequest request) {
 
-        System.out.println("Writer processando requisição " + request.getOperation() + " para a chave: '" + request.getKey() + "'");
+        System.out.println("[Writer na porta " + (localNode != null ? localNode.getPort() : "?") + "] Processando requisição " + request.getOperation() + " para a chave: '" + request.getKey() + "'");
 
         if(request.getOperation() == Operation.POST || request.getOperation() == Operation.PUT) {
 
@@ -58,8 +58,12 @@ public class WriterRequestHandler implements RequestHandler {
 
     private void spreadToNetwork(AppRequest request) {
         if (gossipWorker != null && localNode != null) {
+            System.out.println("[Writer na porta " + localNode.getPort() + "] Propagando chave '" + request.getKey() + "' para a rede via gossip");
+            System.out.flush();
             GossipMessage gossip = new GossipMessage(localNode, localNode.getSequenceNumber(), request, 2);
             gossipWorker.spreadGossip(gossip);
+        } else {
+            System.out.println("[Writer] ERRO: gossipWorker ou localNode é nulo!");
         }
     }
 

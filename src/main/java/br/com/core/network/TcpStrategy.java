@@ -66,11 +66,11 @@ public class TcpStrategy implements CommunicationStrategy {
                                         output.writeObject(response);
                                         output.flush(); 
                                         
-                                    } else if (receivedObject instanceof GossipMessage) {
+                                } else if (receivedObject instanceof GossipMessage) {
                                         GossipMessage gossip = (GossipMessage) receivedObject;
                                         handler.handleGossip(gossip);
                                     }
-                                    
+
                                 } else { // jmeter send requests, uses the http parser for threat the request
                                     pbis.unread(firstByteInt); 
                                     

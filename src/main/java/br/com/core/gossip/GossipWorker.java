@@ -25,7 +25,18 @@ public class GossipWorker {
         this.scheduler = scheduler;
     }
 
-    public void spreadGossip(GossipMessage message) { 
+    public void spreadGossipToPeer(GossipMessage message, NodeInfo peer) {
+        if (message.getHopCount() <= 0) {
+            return;
+        }
+
+        // Create a copy to avoid modifying original
+        GossipMessage copy = new GossipMessage(message.getSourceNode(), message.getSequenceNumber(), message.getData(), message.getHopCount() - 1);
+        System.out.println("[" + localNode.getType() + " na porta " + localNode.getPort() + "] Enviando gossip para " + peer.getType() + " na porta " + peer.getPort());
+        communicationStrategy.sendGossip(copy, peer);
+    }
+
+    public void spreadGossip(GossipMessage message) {
         if (message.getHopCount() <= 0) {
             return;
         }
@@ -34,18 +45,26 @@ public class GossipWorker {
 
         List<NodeInfo> list = membershipList.getPeersToGossip(1);
 
+        if (list.isEmpty()) {
+            System.out.println("[" + localNode.getType() + " na porta " + localNode.getPort() + "] Nenhum peer para enviar gossip");
+            return;
+        }
+
         for (NodeInfo nodeInfo : list) {
             if (!nodeInfo.getSequenceNumber().equals(localNode.getSequenceNumber())) {
+                String key = (message.getData() != null && message.getData().getKey() != null) ? message.getData().getKey() : "null";
+                System.out.println("[" + localNode.getType() + " na porta " + localNode.getPort() + "] Enviando gossip para " + nodeInfo.getType() + " na porta " + nodeInfo.getPort() + " (chave: " + key + ")");
+                System.out.flush();
                 communicationStrategy.sendGossip(message, nodeInfo);
             }
         }
     }
 
-    public void startBackgroundTest() { 
+    public void startBackgroundTest() {
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                membershipList.removeDeadNodes(); 
+                membershipList.removeDeadNodes();
                 localNode.setLastHeartbeat(System.currentTimeMillis());
 
                 AppRequest request = new AppRequest(Operation.GET, null, null);
