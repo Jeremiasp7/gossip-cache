@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import br.com.core.model.NodeInfo;
+import br.com.core.model.NodeType;
 
 public class MembershipList {
     
@@ -66,13 +67,43 @@ public class MembershipList {
         List<NodeInfo> nodesList = new ArrayList<>(activeNodes.values());
 
         nodesList.removeIf(node -> node.getSequenceNumber().equals(localNode.getSequenceNumber()));
-        Collections.shuffle(nodesList);
 
-        if (nodesList.size() < numberOfPeers) {
+        if (nodesList.isEmpty()) {
             return nodesList;
-        } else {
-            return new ArrayList<>(nodesList.subList(0, numberOfPeers));
         }
+
+        List<NodeInfo> selectedPeers = new ArrayList<>();
+
+        if (localNode.getType() != NodeType.GATEWAY) {
+            List<NodeInfo> gatewayCandidates = new ArrayList<>();
+            for (NodeInfo node : nodesList) {
+                if (node.getType() == NodeType.GATEWAY) {
+                    gatewayCandidates.add(node);
+                }
+            }
+
+            if (!gatewayCandidates.isEmpty()) {
+                Collections.shuffle(gatewayCandidates);
+                NodeInfo gateway = gatewayCandidates.get(0);
+                selectedPeers.add(gateway);
+                nodesList.removeIf(node -> node.getSequenceNumber().equals(gateway.getSequenceNumber()));
+            }
+        }
+
+        Collections.shuffle(nodesList);
+        int remaining = numberOfPeers - selectedPeers.size();
+
+        if (remaining <= 0 || nodesList.isEmpty()) {
+            return selectedPeers;
+        }
+
+        if (nodesList.size() <= remaining) {
+            selectedPeers.addAll(nodesList);
+        } else {
+            selectedPeers.addAll(nodesList.subList(0, remaining));
+        }
+
+        return selectedPeers;
     }
 
 
@@ -84,6 +115,7 @@ public class MembershipList {
             if (tempoAtual - node.getLastHeartbeat() > 30000) {
                 if (!node.getSequenceNumber().equals(localNode.getSequenceNumber())) {
                     activeNodes.remove(id);
+                    removeNodeFromTypedList(node);
                     System.out.println("Nó " + node.getPort() + " foi removido por inatividade.");
                 }
             }
