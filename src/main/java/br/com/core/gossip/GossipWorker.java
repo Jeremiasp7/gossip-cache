@@ -43,7 +43,7 @@ public class GossipWorker {
 
         message.setHopCount(message.getHopCount() - 1);
 
-        List<NodeInfo> list = membershipList.getPeersToGossip(1);
+        List<NodeInfo> list = membershipList.getPeersToGossip(3);
 
         if (list.isEmpty()) {
             System.out.println("[" + localNode.getType() + " na porta " + localNode.getPort() + "] Nenhum peer para enviar gossip");

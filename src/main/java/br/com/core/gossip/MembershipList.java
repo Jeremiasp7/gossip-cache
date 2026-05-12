@@ -16,6 +16,8 @@ public class MembershipList {
     private CopyOnWriteArrayList<NodeInfo> readerNodes; // readers list
     private CopyOnWriteArrayList<NodeInfo> writerNodes; // writers list
     private CopyOnWriteArrayList<NodeInfo> gatewayNodes; //gateways list
+    private final ConcurrentHashMap<UUID, Long> removedNodes = new ConcurrentHashMap<>();
+    private static final long TOMBSTONE_TTL = 60_000; // 60 segundos
     
     public MembershipList(NodeInfo localNode) {
         this.localNode = localNode;
@@ -28,14 +30,23 @@ public class MembershipList {
         addNodeToTypedList(localNode);
     }
     
-    public void updateNode(NodeInfo incomingNode) { // updating the node last heartbeat or putting him on the list
-
+    public void updateNode(NodeInfo incomingNode) {
         if (incomingNode.getSequenceNumber().equals(localNode.getSequenceNumber())) {
             return;
         }
 
+        Long removedAt = removedNodes.get(incomingNode.getSequenceNumber());
+        if (removedAt != null) {
+            // Ainda dentro do TTL: ignora
+            if (System.currentTimeMillis() - removedAt < TOMBSTONE_TTL) {
+                return;
+            } else {
+                // TTL expirou: limpa o tombstone e permite reentrada
+                removedNodes.remove(incomingNode.getSequenceNumber());
+            }
+        }
+
         incomingNode.setLastHeartbeat(System.currentTimeMillis());
-        
         activeNodes.put(incomingNode.getSequenceNumber(), incomingNode);
         addNodeToTypedList(incomingNode);
     }
@@ -84,8 +95,16 @@ public class MembershipList {
             if (tempoAtual - node.getLastHeartbeat() > 30000) {
                 if (!node.getSequenceNumber().equals(localNode.getSequenceNumber())) {
                     activeNodes.remove(id);
+                    removeNodeFromTypedList(node);
+                    removedNodes.put(node.getSequenceNumber(), System.currentTimeMillis());
                     System.out.println("Nó " + node.getPort() + " foi removido por inatividade.");
                 }
+            }
+        });
+
+        removedNodes.forEach((uuid, removedAt) -> {
+            if (tempoAtual - removedAt >= TOMBSTONE_TTL) {
+                removedNodes.remove(uuid);
             }
         });
     }
