@@ -4,6 +4,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import br.com.core.dto.CacheEntry;
 
+import br.com.middleware.annotations.MethodMapping;
+import br.com.middleware.annotations.RemoteObject;
+import br.com.middleware.annotations.MethodHTTP;
+
 @RemoteObject(name = "dictionary")
 public class DictionaryStorage {
     
