@@ -13,14 +13,14 @@ public class DictionaryStorage {
     
     private ConcurrentHashMap<String, CacheEntry> mapInMemory = new ConcurrentHashMap<>(); // all the methods will read and write in this object
 
-    @MethodMapping(method = MethodHTTP.GET, path = "get")
+    @MethodMapping(method = MethodHTTP.POST, path = "post")
     public void saveLocalData(String key, byte[] value) { // packages and writes the data
         long actualTimestamp = System.currentTimeMillis();
         CacheEntry packet = new CacheEntry(actualTimestamp, value);
         this.mapInMemory.put(key, packet);
     }
 
-    @MethodMapping(method = MethodHTTP.POST, path = "post")
+    @MethodMapping(method = MethodHTTP.GET, path = "get")
     public byte[] searchData(String key) { // search a data in the memory
         CacheEntry cache = mapInMemory.get(key);
         if (cache == null || cache.getValue() == null) {
