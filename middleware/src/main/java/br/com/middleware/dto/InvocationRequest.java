@@ -9,12 +9,14 @@ public class InvocationRequest implements Serializable {
     private static final long serialVersionUID = 1L;
     
     private ObjectId objectId;
-    private String methodName; 
+    private String methodPath;
+    private String httpMethod;
     private Object[] parameters;
 
-    public InvocationRequest(ObjectId objectId, String methodName, Object[] parameters) {
+    public InvocationRequest(ObjectId objectId, String methodPath, String httpMethod, Object[] parameters) {
         this.objectId = objectId;
-        this.methodName = methodName;
+        this.methodPath = methodPath;
+        this.httpMethod = httpMethod;
         this.parameters = parameters;
     }
 
@@ -26,12 +28,12 @@ public class InvocationRequest implements Serializable {
         this.objectId = objectId;
     }
 
-    public String getMethodName() {
-        return methodName;
+    public String getMethodPath() {
+        return methodPath;
     }
 
-    public void setMethodName(String methodName) {
-        this.methodName = methodName;
+    public void setMethodPath(String methodPath) {
+        this.methodPath = methodPath;
     }
 
     public Object[] getParameters() {
@@ -42,5 +44,12 @@ public class InvocationRequest implements Serializable {
         this.parameters = parameters;
     }
 
-    
+    public String getHttpMethod() {
+        return httpMethod;
+    }
+
+    public void setHttpMethod(String httpMethod) {
+        this.httpMethod = httpMethod;
+    }
+
 }

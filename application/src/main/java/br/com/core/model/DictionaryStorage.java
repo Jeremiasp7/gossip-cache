@@ -5,6 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import br.com.core.dto.CacheEntry;
 
 import br.com.middleware.annotations.MethodMapping;
+import br.com.middleware.annotations.Param;
 import br.com.middleware.annotations.RemoteObject;
 import br.com.middleware.annotations.MethodHTTP;
 
@@ -14,7 +15,7 @@ public class DictionaryStorage {
     private ConcurrentHashMap<String, CacheEntry> mapInMemory = new ConcurrentHashMap<>(); // all the methods will read and write in this object
 
     @MethodMapping(method = MethodHTTP.POST, path = "post")
-    public void saveLocalData(String key, byte[] value) { // packages and writes the data
+    public void saveLocalData(@Param(name = "key") String key, @Param(name = "value") byte[] value) { // packages and writes the data
         long actualTimestamp = System.currentTimeMillis();
         CacheEntry packet = new CacheEntry(actualTimestamp, value);
         this.mapInMemory.put(key, packet);
