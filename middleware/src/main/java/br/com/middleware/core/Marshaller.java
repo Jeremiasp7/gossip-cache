@@ -3,6 +3,7 @@ package br.com.middleware.core;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 
 import br.com.middleware.annotations.MethodMapping;
@@ -11,9 +12,19 @@ import br.com.middleware.dto.InvocationRequest;
 
 public class Marshaller {
 
+    private final Lookup lookup;
+
+    public Marshaller(Lookup lookup) {
+        this.lookup = lookup;
+    }
+
+    
+
     public InvocationRequest unmarshal(String httpMethod, String objectName,
-                                       String methodPath, Map<String, String> params,
-                                       Class<?> targetClass) throws Exception {
+                                       String methodPath,
+                                       Map<String, String> params) throws Exception {
+        Class<?> targetClass = lookup.findClass(objectName);
+
         Method targetMethod = null;
         for (Method m : targetClass.getDeclaredMethods()) {
             MethodMapping mm = m.getAnnotation(MethodMapping.class);
@@ -31,6 +42,9 @@ public class Marshaller {
         Object[] args = new Object[parameters.length];
         for (int i = 0; i < parameters.length; i++) {
             Param p = parameters[i].getAnnotation(Param.class);
+            System.out.println("[DEBUG] param=" + parameters[i].getName() 
+                + " anotações=" + Arrays.toString(parameters[i].getAnnotations())
+                + " @Param=" + p);
             if (p == null)
                 throw new RuntimeException("Parâmetro sem @Param: "
                         + parameters[i].getName());

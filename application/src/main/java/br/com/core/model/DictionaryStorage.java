@@ -22,7 +22,7 @@ public class DictionaryStorage {
     }
 
     @MethodMapping(method = MethodHTTP.GET, path = "get")
-    public byte[] searchData(String key) { // search a data in the memory
+    public byte[] searchData(@Param(name = "key") String key) { // search a data in the memory
         CacheEntry cache = mapInMemory.get(key);
         if (cache == null || cache.getValue() == null) {
             return null; 

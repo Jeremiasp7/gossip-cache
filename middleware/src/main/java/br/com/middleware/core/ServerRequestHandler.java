@@ -5,12 +5,14 @@ import br.com.middleware.dto.InvocationRequest;
 
 public class ServerRequestHandler {
 
+    private final Lookup lookup;
     private final Invoker invoker;
     private final Marshaller marshaller;
 
     public ServerRequestHandler(Invoker invoker) {
+        this.lookup = new Lookup(); // **
         this.invoker = invoker;
-        this.marshaller = new Marshaller();
+        this.marshaller = new Marshaller(lookup);
     }
 
     public String handle(InvocationRequest request) {
