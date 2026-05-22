@@ -7,8 +7,11 @@ import br.com.core.dto.CacheEntry;
 import br.com.middleware.annotations.MethodMapping;
 import br.com.middleware.annotations.Param;
 import br.com.middleware.annotations.RemoteObject;
+import br.com.middleware.lifecycle.Lifecycle;
+import br.com.middleware.lifecycle.LifecycleMode;
 import br.com.middleware.annotations.MethodHTTP;
 
+@Lifecycle(value = LifecycleMode.POOLING, poolSize = 5)
 @RemoteObject(name = "dictionary")
 public class DictionaryStorage {
     

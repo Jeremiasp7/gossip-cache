@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import br.com.middleware.annotations.MethodMapping;
 import br.com.middleware.dto.InvocationReply;
 import br.com.middleware.dto.InvocationRequest;
+import br.com.middleware.lifecycle.InstanceProvider;
 
 public class Invoker {
 
@@ -15,10 +16,12 @@ public class Invoker {
     }
 
     public InvocationReply invoke(InvocationRequest request) {
-        try {
-            Object remoteObject = lookup.find(
-                request.getObjectId().getResourceName());
 
+        String objectName = request.getObjectId().getResourceName();
+        InstanceProvider provider = lookup.findProvider(objectName);
+        Object remoteObject = provider.getInstance();
+
+        try {
             Method methodToInvoke = null;
             for (Method m : remoteObject.getClass().getDeclaredMethods()) {
                 MethodMapping mm = m.getAnnotation(MethodMapping.class);
@@ -40,6 +43,9 @@ public class Invoker {
         } catch (Exception e) {
             String msg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
             return new InvocationReply(null, msg);
+
+        } finally {
+            provider.returnInstance(remoteObject);
         }
     }
 }
