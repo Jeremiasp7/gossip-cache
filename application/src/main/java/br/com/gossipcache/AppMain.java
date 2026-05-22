@@ -17,7 +17,7 @@ public class AppMain {
 
         Marshaller marshaller       = new Marshaller(lookup);
         Invoker invoker             = new Invoker(lookup);
-        ServerRequestHandler srh    = new ServerRequestHandler(invoker);
+        ServerRequestHandler srh    = new ServerRequestHandler(invoker, marshaller);
 
         // Logar AORs
         lookup.getAll().forEach((name, obj) -> System.out.println(
