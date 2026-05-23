@@ -52,7 +52,7 @@ public class Marshaller {
         }
 
         ObjectId objectId = new ObjectId(objectName, methodPath);
-        return new InvocationRequest(objectId, methodPath, httpMethod, args);
+        return new InvocationRequest(objectId, methodPath, httpMethod, args, params);
     }
 
     public String marshal(Object result) {

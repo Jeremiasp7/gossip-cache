@@ -1,5 +1,7 @@
 package br.com.middleware.core;
 
+import br.com.middleware.interceptor.InterceptorChain;
+import br.com.middleware.interceptor.InvocationInterceptor;
 import br.com.middleware.network.ProtocolPlugin;
 
 public class Broker {
@@ -7,6 +9,7 @@ public class Broker {
     private final Lookup lookup;
     private final Marshaller marshaller;
     private final Invoker invoker;
+    private final InterceptorChain interceptorChain;
     private final ServerRequestHandler serverRequestHandler;
     private ProtocolPlugin protocol;
 
@@ -14,12 +17,18 @@ public class Broker {
         this.lookup = new Lookup();
         this.marshaller = new Marshaller(lookup);
         this.invoker = new Invoker(lookup);
-        this.serverRequestHandler = new ServerRequestHandler(invoker, marshaller);
+        this.interceptorChain  = new InterceptorChain();
+        this.serverRequestHandler = new ServerRequestHandler(invoker, marshaller, interceptorChain);
     }
 
     public Broker register(Object remoteObject) {
         lookup.register(remoteObject);
         return this; // fluent API para encadear registros
+    }
+
+    public Broker addInterceptor(InvocationInterceptor interceptor) {
+        interceptorChain.add(interceptor);
+        return this;
     }
 
     public Broker useProtocol(ProtocolPlugin protocol) {
