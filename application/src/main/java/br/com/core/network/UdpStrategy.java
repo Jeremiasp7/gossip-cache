@@ -8,175 +8,107 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
 import br.com.core.model.RequestHandler;
+import br.com.middleware.network.AbstractUdpServer;
 
-public class UdpStrategy implements CommunicationStrategy {
-    
-    private RequestHandler handler;
+public class UdpStrategy extends AbstractUdpServer implements CommunicationStrategy {
+
+    private final RequestHandler handler;
 
     public UdpStrategy(RequestHandler handler) {
         this.handler = handler;
     }
 
     @Override
-    public void startListening(int port) { 
+    public void startListening(int port) {
+        listen(port);
+    }
 
-        ExecutorService executor = Executors.newFixedThreadPool(16);
+    @Override
+    protected void handlePacket(byte[] data, int offset, int length,
+                                InetAddress addr, int port,
+                                DatagramSocket socket) {
+        try {
+            byte magicByte = data[offset];
 
-        try (DatagramSocket datagramSocket = new DatagramSocket(port)) { 
-            System.out.println("Servidor UDP escutando na porta: " + port);
+            if (magicByte == (byte) -84) {
+                ByteArrayInputStream bis = new ByteArrayInputStream(data, offset, length);
+                ObjectInputStream input  = new ObjectInputStream(bis);
+                Object received          = input.readObject();
 
-            while (true) {
-                
-                byte[] inputBytes = new byte[8192]; 
-                DatagramPacket inputPacket = new DatagramPacket(inputBytes, inputBytes.length);
+                if (received instanceof AppRequest) {
+                    AppResponse response = handler.handleRequest((AppRequest) received);
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    ObjectOutputStream output = new ObjectOutputStream(bos);
+                    output.writeObject(response);
+                    output.flush();
+                    sendResponse(socket, bos.toByteArray(), addr, port);
 
-                datagramSocket.receive(inputPacket);
+                } else if (received instanceof GossipMessage) {
+                    handler.handleGossip((GossipMessage) received);
+                }
 
-                executor.submit(() -> {
-                    try { 
-                        byte[] inputData = inputPacket.getData();
-                        int offset = inputPacket.getOffset();
-                        int length = inputPacket.getLength();
+            } else {
+                String text   = new String(data, offset, length).trim();
+                String[] parts = text.split(",");
 
-                        byte magicByte = inputData[offset];
-                        AppRequest request = null;
-                        Object receivedObject = null;
-                        
-                        boolean isJMeterText = false; 
-                        boolean isGossip = false;
-                        if (magicByte == (byte) -84) { // any serialized object starts with byte -84 -> gateway or writer
-                            ByteArrayInputStream byteInputStream = new ByteArrayInputStream(inputData, offset, length);
-                            ObjectInputStream input = new ObjectInputStream(byteInputStream);
-                            
-                            receivedObject = input.readObject();
+                br.com.core.model.Operation op =
+                    br.com.core.model.Operation.valueOf(parts[0].trim());
+                String key   = parts.length > 1 ? parts[1].trim() : null;
+                byte[] value = parts.length > 2 ? parts[2].trim().getBytes() : null;
 
-                            if (receivedObject instanceof AppRequest) {
-                                request = (AppRequest) receivedObject;
-                            } else if (receivedObject instanceof GossipMessage) {
-                                isGossip = true;
-                            }
-                            
-                        } else { // jmeter send requests
-                            isJMeterText = true;
-                            String text = new String(inputData, offset, length).trim();
-                            String[] parts = text.split(","); 
-                            
-                            br.com.core.model.Operation op = br.com.core.model.Operation.valueOf(parts[0].trim());
-                            String key = parts.length > 1 ? parts[1].trim() : null;
-                            byte[] value = parts.length > 2 ? parts[2].trim().getBytes() : null;
-                            
-                            request = new AppRequest(op, key, value);
-                        }
-
-                        if (isGossip) {
-                            GossipMessage gossip = (GossipMessage) receivedObject;
-                            handler.handleGossip(gossip);
-                            return; 
-                        }
-
-                        AppResponse response = handler.handleRequest(request);
-
-                        byte[] outputBytes;
-                        
-                        if (isJMeterText) { // form a response from the jmeter request
-                            String responseText = response.getStatus() + " - " + response.getMessage();
-                            outputBytes = responseText.getBytes();
-                        } else { // work with the binary response that comes from gateway
-                            ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
-                            ObjectOutputStream output = new ObjectOutputStream(byteOutputStream);
-                            output.writeObject(response);
-                            output.flush();
-                            outputBytes = byteOutputStream.toByteArray();
-                        }
-
-                        DatagramPacket outputPacket = new DatagramPacket(outputBytes, outputBytes.length, 
-                            inputPacket.getAddress(), inputPacket.getPort()
-                        );
-                        datagramSocket.send(outputPacket);
-
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
+                AppResponse response = handler.handleRequest(
+                    new AppRequest(op, key, value));
+                String responseText  = response.getStatus() + " - " + response.getMessage();
+                sendResponse(socket, responseText.getBytes(), addr, port);
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
-    } 
+    }
 
     @Override
-    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) { // gateway use this method for ask data to the writer or reader
-
+    public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) {
         try (DatagramSocket socket = new DatagramSocket()) {
-
-            socket.setSoTimeout(5000); 
-
-            ByteArrayOutputStream byteOutput = new ByteArrayOutputStream();
-            ObjectOutputStream objectOutput = new ObjectOutputStream(byteOutput);
-
-            objectOutput.writeObject(request);
-            objectOutput.flush();
-            byte[] sendBytes = byteOutput.toByteArray();
-
-            InetAddress destinationNodeAdress = InetAddress.getByName(destinationNode.getAddress());
-            DatagramPacket outputPacket = new DatagramPacket(sendBytes, sendBytes.length, 
-                destinationNodeAdress, destinationNode.getPort()
-            );
-
-            socket.send(outputPacket);
-
+            socket.setSoTimeout(5000);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream output = new ObjectOutputStream(bos);
+            output.writeObject(request);
+            output.flush();
+            byte[] sendBytes = bos.toByteArray();
+            InetAddress addr = InetAddress.getByName(destinationNode.getAddress());
+            socket.send(new DatagramPacket(
+                sendBytes, sendBytes.length, addr, destinationNode.getPort()));
             byte[] inputBytes = new byte[8192];
             DatagramPacket inputPacket = new DatagramPacket(inputBytes, inputBytes.length);
-
             socket.receive(inputPacket);
-
-            ByteArrayInputStream byteInputStream = new ByteArrayInputStream(inputPacket.getData(), 
-                0, inputPacket.getLength()
-            );
-            ObjectInputStream input = new ObjectInputStream(byteInputStream);
-
-            AppResponse response = (AppResponse) input.readObject();
-
-            return response;
-
-        } catch (SocketTimeoutException timeoutException) {
-            System.err.println("Tempo esgotado aguardando resposta de " + destinationNode.getPort());
+            ByteArrayInputStream bis = new ByteArrayInputStream(
+                inputPacket.getData(), 0, inputPacket.getLength());
+            return (AppResponse) new ObjectInputStream(bis).readObject();
+        } catch (SocketTimeoutException e) {
             return new AppResponse("503", null, "Service Unavailable / Timeout");
-
         } catch (Exception e) {
-            e.printStackTrace();
             return new AppResponse("500", null, "Internal Server Error");
         }
     }
 
     @Override
-    public void sendGossip(GossipMessage message, NodeInfo destinationNode) { // the writer serializes the gossip message and send to the reader
-
+    public void sendGossip(GossipMessage message, NodeInfo destinationNode) {
         try (DatagramSocket socket = new DatagramSocket()) {
-
-            InetAddress destinationNodeAddress = InetAddress.getByName(destinationNode.getAddress());
-            
-            ByteArrayOutputStream byteOutput = new ByteArrayOutputStream();
-            ObjectOutputStream output = new ObjectOutputStream(byteOutput);
-
+            InetAddress addr = InetAddress.getByName(destinationNode.getAddress());
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream output = new ObjectOutputStream(bos);
             output.writeObject(message);
             output.flush();
-            byte[] sendBytes = byteOutput.toByteArray();
-
-            DatagramPacket gossipPacket = new DatagramPacket(sendBytes, sendBytes.length, 
-                destinationNodeAddress, destinationNode.getPort()
-            );
-
-            socket.send(gossipPacket);
-
+            byte[] bytes = bos.toByteArray();
+            socket.send(new DatagramPacket(
+                bytes, bytes.length, addr, destinationNode.getPort()));
         } catch (Exception e) {
             e.printStackTrace();
         }
