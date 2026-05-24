@@ -14,6 +14,11 @@ import br.com.core.network.GrpcStrategy;
 import br.com.core.network.HttpParser;
 import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
+import br.com.middleware.core.Broker;
+import br.com.middleware.interceptor.LoggingInterceptor;
+import br.com.middleware.network.ProtocolPlugin;
+import br.com.middleware.network.TcpPlugin;
+import br.com.middleware.network.UdpPlugin;
 
 public class ApiGatewayServer {
     
@@ -21,43 +26,49 @@ public class ApiGatewayServer {
 
         try {
             int gatewayPort = Integer.parseInt(args[0]);
-            String protocol = args[1]; // UDP, TCP or gRPC
+            String protocol = args[1];
 
             NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
+            
             MembershipList membershipList = new MembershipList(localNode);
-
             ServiceRegistry registry = new ServiceRegistry(membershipList);
             RequestRouter requestRouter = new RequestRouter(registry);
             GatewayRequestHandler gatewayRequestHandler = new GatewayRequestHandler(requestRouter);
-            CommunicationStrategy strategy = null;
+            CommunicationStrategy internalStrategy;
 
             if (protocol.equalsIgnoreCase("UDP")) {
-                strategy = new UdpStrategy(gatewayRequestHandler);
+                internalStrategy = new UdpStrategy(gatewayRequestHandler);
 
             } else if (protocol.equalsIgnoreCase("TCP")) {
                 HttpParser httpParser = new HttpParser();
-                strategy = new TcpStrategy(gatewayRequestHandler, httpParser);
+                internalStrategy = new TcpStrategy(gatewayRequestHandler, httpParser);
 
             } else if (protocol.equalsIgnoreCase("GRPC")) {
                 GrpcMapper grpcMapper = new GrpcMapper();
-                strategy = new GrpcStrategy(gatewayRequestHandler, grpcMapper);
+                internalStrategy = new GrpcStrategy(gatewayRequestHandler, grpcMapper);
 
             } else {
                 System.out.println("Método inválido. Escolha UDP, TCP ou GRPC.");
                 return;
             }
 
-            final CommunicationStrategy finalStrategy = strategy;
-            requestRouter.setCommunicationStrategy(strategy);
+            requestRouter.setCommunicationStrategy(internalStrategy);
 
-            GossipWorker worker = new GossipWorker(membershipList, finalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(membershipList, internalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
             gatewayRequestHandler.setMembershipList(membershipList);
             gatewayRequestHandler.setGossipWorker(worker);
 
-            final int port = gatewayPort;
-            System.out.println("API Gateway no ar na porta " + port + " roteando requisições via " + protocol.toUpperCase() + "!");
-            new Thread(() -> finalStrategy.startListening(port)).start();
-            worker.startBackgroundTest();
+            GatewayService gatewayService = new GatewayService(requestRouter, membershipList);
+
+            ProtocolPlugin plugin = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+
+            System.out.println("API Gateway no ar na porta " + gatewayPort +" via " +protocol.toUpperCase());
+
+             new Broker()
+                .register(gatewayService)
+                .addInterceptor(new LoggingInterceptor())
+                .useProtocol(plugin)
+                .start(gatewayPort);
 
         } catch (Exception e) {
             System.err.println("Erro ao iniciar o API Gateway: " + e.getMessage());

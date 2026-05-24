@@ -15,6 +15,11 @@ import br.com.core.network.GrpcStrategy;
 import br.com.core.network.HttpParser;
 import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
+import br.com.middleware.core.Broker;
+import br.com.middleware.interceptor.LoggingInterceptor;
+import br.com.middleware.network.ProtocolPlugin;
+import br.com.middleware.network.TcpPlugin;
+import br.com.middleware.network.UdpPlugin;
 
 public class ReaderServer {
 
@@ -24,11 +29,7 @@ public class ReaderServer {
 
             int port = Integer.parseInt(args[0]);
             String protocol = args[1];
-            Integer gatewayPort = null;
-
-            if (args.length > 2) {
-                gatewayPort = Integer.parseInt(args[2]);
-            }
+            Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
 
             NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), port, 0, NodeType.READER);
             MembershipList membershipList = new MembershipList(localNode);
@@ -62,15 +63,21 @@ public class ReaderServer {
                 return;
             }
 
-            final CommunicationStrategy finalStrategy = strategy;
-            GossipWorker worker = new GossipWorker(membershipList, finalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            final int listenPort = port;
-            System.out.println("Uma instância do Reader acaba de subir na porta " + listenPort + "!");
-            new Thread(() -> finalStrategy.startListening(listenPort)).start();
+            new Thread(() -> strategy.startListening(port)).start();
             worker.startBackgroundTest();
+            System.out.println("Uma instância do Reader acaba de subir na porta " + port + "!");
+
+            ProtocolPlugin plugin = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+
+            new Broker()
+                .register(dictionary)
+                .addInterceptor(new LoggingInterceptor())
+                .useProtocol(plugin)
+                .start(port);
 
         } catch (Exception e) {
             e.printStackTrace();
