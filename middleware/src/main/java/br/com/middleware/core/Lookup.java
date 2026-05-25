@@ -34,13 +34,13 @@ public class Lookup {
         if (lifecycle == null || lifecycle.value() == LifecycleMode.STATIC) {
             provider = new StaticInstanceProvider(object);
             System.out.println("[Lookup] " +name +" -> STATIC");
-        } else if (lifecycle == null || lifecycle.value() == LifecycleMode.PER_REQUEST) {
+        } else if (lifecycle.value() == LifecycleMode.PER_REQUEST) {
             provider = new PerRequestInstanceProvider(clazz);
             System.out.println("[Lookup] " +name +" -> PER_REQUEST");
-        } else if (lifecycle == null || lifecycle.value() == LifecycleMode.LAZY) {
-            provider = new PerRequestInstanceProvider(clazz);
+        } else if (lifecycle.value() == LifecycleMode.LAZY) {
+            provider = new LazyInstanceProvider(clazz);
             System.out.println("[Lookup] " +name +" -> LAZY");
-        } else if (lifecycle == null || lifecycle.value() == LifecycleMode.POOLING) {
+        } else if (lifecycle.value() == LifecycleMode.POOLING) {
             provider = new PoolingInstanceProvider(clazz, lifecycle.poolSize());
             System.out.println("[Lookup] " +name +" -> LAZY");
         } else {
@@ -74,7 +74,7 @@ public class Lookup {
             return ((LazyInstanceProvider) provider).getClazz();
         if (provider instanceof PoolingInstanceProvider)
             return ((PoolingInstanceProvider) provider).getClazz();
-        throw new RuntimeException("Tipo de provider desconhecido para: " + name);
+        throw new RuntimeException("Provider desconhecido para: " + name);
     }
 
     public Map<String, InstanceProvider> getAll() {

@@ -1,7 +1,6 @@
 package br.com.middleware.network;
 
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -15,14 +14,14 @@ public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
     private Marshaller marshaller;
 
     @Override
-    public void start(int port, ServerRequestHandler srh, Marshaller marshaller) {
+    public void init(ServerRequestHandler srh, Marshaller marshaller) {
         this.srh        = srh;
         this.marshaller = marshaller;
-        listen(port);
+        System.out.println("[UdpPlugin] Inicializado");
     }
 
     @Override
-    protected void handlePacket(byte[] data, int offset, int length,
+    public void handleUdpPacket(byte[] data, int offset, int length,
                                 InetAddress addr, int port,
                                 DatagramSocket socket) {
         try {
@@ -37,7 +36,8 @@ public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
                 httpMethod, objectName, methodPath, params);
             String body = srh.handle(request);
 
-            sendResponse(socket, body.getBytes(StandardCharsets.UTF_8), addr, port);
+            sendResponse(socket,
+                body.getBytes(StandardCharsets.UTF_8), addr, port);
 
         } catch (Exception e) {
             System.err.println("[UdpPlugin] Erro: " + e.getMessage());
@@ -46,6 +46,16 @@ public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
                     .getBytes(StandardCharsets.UTF_8), addr, port);
         }
     }
+
+    // TCP não usado no UdpPlugin
+    @Override
+    public void handleHttpConnection(Socket connection) {}
+
+    // Não usado — UdpStrategy é quem abre o DatagramSocket
+    @Override
+    protected void handlePacket(byte[] data, int offset, int length,
+                                InetAddress addr, int port,
+                                DatagramSocket socket) {}
 
     @Override
     public String getProtocolName() { return "UDP"; }

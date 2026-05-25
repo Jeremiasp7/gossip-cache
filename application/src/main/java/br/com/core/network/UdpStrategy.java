@@ -13,15 +13,22 @@ import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
+import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 import br.com.middleware.network.AbstractUdpServer;
+import br.com.middleware.network.ProtocolPlugin;
 
 public class UdpStrategy extends AbstractUdpServer implements CommunicationStrategy {
 
     private final RequestHandler handler;
+    private ProtocolPlugin plugin; // injetado pelo servidor
 
     public UdpStrategy(RequestHandler handler) {
         this.handler = handler;
+    }
+
+    public void setPlugin(ProtocolPlugin plugin) {
+        this.plugin = plugin;
     }
 
     @Override
@@ -37,6 +44,7 @@ public class UdpStrategy extends AbstractUdpServer implements CommunicationStrat
             byte magicByte = data[offset];
 
             if (magicByte == (byte) -84) {
+                // Serializado — gossip ou AppRequest entre nós
                 ByteArrayInputStream bis = new ByteArrayInputStream(data, offset, length);
                 ObjectInputStream input  = new ObjectInputStream(bis);
                 Object received          = input.readObject();
@@ -48,24 +56,27 @@ public class UdpStrategy extends AbstractUdpServer implements CommunicationStrat
                     output.writeObject(response);
                     output.flush();
                     sendResponse(socket, bos.toByteArray(), addr, port);
-
                 } else if (received instanceof GossipMessage) {
                     handler.handleGossip((GossipMessage) received);
                 }
 
             } else {
-                String text   = new String(data, offset, length).trim();
-                String[] parts = text.split(",");
-
-                br.com.core.model.Operation op =
-                    br.com.core.model.Operation.valueOf(parts[0].trim());
-                String key   = parts.length > 1 ? parts[1].trim() : null;
-                byte[] value = parts.length > 2 ? parts[2].trim().getBytes() : null;
-
-                AppResponse response = handler.handleRequest(
-                    new AppRequest(op, key, value));
-                String responseText  = response.getStatus() + " - " + response.getMessage();
-                sendResponse(socket, responseText.getBytes(), addr, port);
+                // JSON — delega ao plugin se disponível
+                if (plugin != null) {
+                    plugin.handleUdpPacket(data, offset, length, addr, port, socket);
+                } else {
+                    // Fallback sem middleware
+                    String text    = new String(data, offset, length).trim();
+                    String[] parts = text.split(",");
+                    Operation op   = Operation.valueOf(parts[0].trim());
+                    String key     = parts.length > 1 ? parts[1].trim() : null;
+                    byte[] value   = parts.length > 2 ? parts[2].trim().getBytes() : null;
+                    AppResponse response  = handler.handleRequest(
+                        new AppRequest(op, key, value));
+                    String responseText  =
+                        response.getStatus() + " - " + response.getMessage();
+                    sendResponse(socket, responseText.getBytes(), addr, port);
+                }
             }
 
         } catch (Exception e) {

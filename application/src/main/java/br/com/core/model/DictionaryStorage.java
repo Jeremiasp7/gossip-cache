@@ -11,7 +11,7 @@ import br.com.middleware.lifecycle.Lifecycle;
 import br.com.middleware.lifecycle.LifecycleMode;
 import br.com.middleware.annotations.MethodHTTP;
 
-@Lifecycle(value = LifecycleMode.POOLING, poolSize = 5)
+@Lifecycle(LifecycleMode.STATIC)
 @RemoteObject(name = "dictionary")
 public class DictionaryStorage {
     

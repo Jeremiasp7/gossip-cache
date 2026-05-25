@@ -22,63 +22,79 @@ import br.com.middleware.network.TcpPlugin;
 import br.com.middleware.network.UdpPlugin;
 
 public class WriterServer {
-    
+
     public static void main(String[] args) {
-
-        try  {
-
-            int port = Integer.parseInt(args[0]);
-            String protocol = args[1];
+        try {
+            int port            = Integer.parseInt(args[0]);
+            String protocol     = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
 
-            NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), port, 0, NodeType.WRITER);
+            NodeInfo localNode = new NodeInfo(
+                UUID.randomUUID(),
+                InetAddress.getLocalHost().getHostAddress(),
+                port, 0, NodeType.WRITER);
+
             MembershipList membershipList = new MembershipList(localNode);
 
             if (gatewayPort != null) {
-                NodeInfo gatewayNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
+                NodeInfo gatewayNode = new NodeInfo(
+                    UUID.randomUUID(),
+                    InetAddress.getLocalHost().getHostAddress(),
+                    gatewayPort, 0, NodeType.GATEWAY);
                 membershipList.updateNode(gatewayNode);
                 System.out.println("Gateway descoberto na porta " + gatewayPort);
             }
 
-            DictionaryStorage dictionary = new DictionaryStorage();
-            WriterRequestHandler writeHandler = new WriterRequestHandler(dictionary, membershipList);
+            // Instância compartilhada entre gossip e middleware
+            DictionaryStorage dictionary    = new DictionaryStorage();
+            WriterRequestHandler writeHandler =
+                new WriterRequestHandler(dictionary, membershipList);
+
+            // Criar o strategy concreto para poder injetar o plugin depois
+            TcpStrategy tcpStrategy = null;
+            UdpStrategy udpStrategy = null;
             CommunicationStrategy strategy;
 
             if (protocol.equalsIgnoreCase("UDP")) {
-                UdpStrategy udp = new UdpStrategy(writeHandler);
-                strategy = udp;
-
+                udpStrategy = new UdpStrategy(writeHandler);
+                strategy    = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
-                HttpParser httpParser = new HttpParser();
-                TcpStrategy tcp = new TcpStrategy(writeHandler, httpParser);
-                strategy = tcp;
-
+                tcpStrategy = new TcpStrategy(writeHandler, new HttpParser());
+                strategy    = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
-                GrpcMapper grpcMapper = new GrpcMapper();
-                GrpcStrategy grpc = new GrpcStrategy(writeHandler, grpcMapper);
-                strategy = grpc;
-
+                strategy = new GrpcStrategy(writeHandler, new GrpcMapper());
             } else {
                 System.out.println("Método inválido.");
                 return;
             }
 
-            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(
+                membershipList, strategy, localNode,
+                Executors.newSingleThreadScheduledExecutor());
             writeHandler.setGossipWorker(worker);
             writeHandler.setLocalNode(localNode);
 
-            new Thread(() -> strategy.startListening(port)).start();
-            worker.startBackgroundTest();
+            // Broker inicializa o plugin e devolve ele pronto
+            ProtocolPlugin pluginImpl =
+                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
-            System.out.println("Writer no ar na porta " +port +" via " +protocol.toUpperCase());
-
-            ProtocolPlugin plugin = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
-
-            new Broker()
+            ProtocolPlugin plugin = new Broker()
                 .register(dictionary)
                 .addInterceptor(new LoggingInterceptor())
-                .useProtocol(plugin)
-                .start(port);
+                .useProtocol(pluginImpl)
+                .build(port); // ← inicializa, loga AOR, devolve plugin
+
+            // Injeta o plugin no strategy — sem abrir nova porta
+            if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
+            if (udpStrategy != null) udpStrategy.setPlugin(plugin);
+
+            // Strategy é o único listener na porta
+            final CommunicationStrategy finalStrategy = strategy;
+            new Thread(() -> finalStrategy.startListening(port)).start();
+            worker.startBackgroundTest();
+
+            System.out.println("Writer no ar na porta " + port
+                + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             e.printStackTrace();

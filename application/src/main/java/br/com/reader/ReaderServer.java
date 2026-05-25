@@ -24,64 +24,76 @@ import br.com.middleware.network.UdpPlugin;
 public class ReaderServer {
 
     public static void main(String[] args) {
-
-        try  {
-
-            int port = Integer.parseInt(args[0]);
-            String protocol = args[1];
+        try {
+            int port            = Integer.parseInt(args[0]);
+            String protocol     = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
 
-            NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), port, 0, NodeType.READER);
+            NodeInfo localNode = new NodeInfo(
+                UUID.randomUUID(),
+                InetAddress.getLocalHost().getHostAddress(),
+                port, 0, NodeType.READER);
+
             MembershipList membershipList = new MembershipList(localNode);
 
             if (gatewayPort != null) {
-                NodeInfo gatewayNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
+                NodeInfo gatewayNode = new NodeInfo(
+                    UUID.randomUUID(),
+                    InetAddress.getLocalHost().getHostAddress(),
+                    gatewayPort, 0, NodeType.GATEWAY);
                 membershipList.updateNode(gatewayNode);
                 System.out.println("Gateway descoberto na porta " + gatewayPort);
             }
 
-            DictionaryStorage dictionary = new DictionaryStorage();
-            ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList);
+            // Instância compartilhada entre gossip e middleware
+            DictionaryStorage dictionary   = new DictionaryStorage();
+            ReadRequestHandler readHandler =
+                new ReadRequestHandler(dictionary, membershipList);
+
+            TcpStrategy tcpStrategy = null;
+            UdpStrategy udpStrategy = null;
             CommunicationStrategy strategy;
 
             if (protocol.equalsIgnoreCase("UDP")) {
-                UdpStrategy udp = new UdpStrategy(readHandler);
-                strategy = udp;
-
+                udpStrategy = new UdpStrategy(readHandler);
+                strategy    = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
-                HttpParser httpParser = new HttpParser();
-                TcpStrategy tcp = new TcpStrategy(readHandler, httpParser);
-                strategy = tcp;
-
+                tcpStrategy = new TcpStrategy(readHandler, new HttpParser());
+                strategy    = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
-                GrpcMapper grpcMapper = new GrpcMapper();
-                GrpcStrategy grpc = new GrpcStrategy(readHandler, grpcMapper);
-                strategy = grpc;
-
+                strategy = new GrpcStrategy(readHandler, new GrpcMapper());
             } else {
                 System.out.println("Método inválido.");
                 return;
             }
 
-            GossipWorker worker = new GossipWorker(membershipList, strategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(
+                membershipList, strategy, localNode,
+                Executors.newSingleThreadScheduledExecutor());
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            new Thread(() -> strategy.startListening(port)).start();
-            worker.startBackgroundTest();
-            System.out.println("Uma instância do Reader acaba de subir na porta " + port + "!");
+            ProtocolPlugin pluginImpl =
+                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
-            ProtocolPlugin plugin = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
-
-            new Broker()
+            ProtocolPlugin plugin = new Broker()
                 .register(dictionary)
                 .addInterceptor(new LoggingInterceptor())
-                .useProtocol(plugin)
-                .start(port);
+                .useProtocol(pluginImpl)
+                .build(port);
+
+            if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
+            if (udpStrategy != null) udpStrategy.setPlugin(plugin);
+
+            final CommunicationStrategy finalStrategy = strategy;
+            new Thread(() -> finalStrategy.startListening(port)).start();
+            worker.startBackgroundTest();
+
+            System.out.println("Reader no ar na porta " + port
+                + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 }

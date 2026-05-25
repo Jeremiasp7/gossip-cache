@@ -21,32 +21,36 @@ import br.com.middleware.network.TcpPlugin;
 import br.com.middleware.network.UdpPlugin;
 
 public class ApiGatewayServer {
-    
-    public static void main(String[] args) {
 
+    public static void main(String[] args) {
         try {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1];
 
-            NodeInfo localNode = new NodeInfo(UUID.randomUUID(), InetAddress.getLocalHost().getHostAddress(), gatewayPort, 0, NodeType.GATEWAY);
-            
+            NodeInfo localNode = new NodeInfo(
+                UUID.randomUUID(),
+                InetAddress.getLocalHost().getHostAddress(),
+                gatewayPort, 0, NodeType.GATEWAY);
+
             MembershipList membershipList = new MembershipList(localNode);
-            ServiceRegistry registry = new ServiceRegistry(membershipList);
-            RequestRouter requestRouter = new RequestRouter(registry);
-            GatewayRequestHandler gatewayRequestHandler = new GatewayRequestHandler(requestRouter);
+            ServiceRegistry registry      = new ServiceRegistry(membershipList);
+            RequestRouter requestRouter   = new RequestRouter(registry);
+            GatewayRequestHandler gatewayRequestHandler =
+                new GatewayRequestHandler(requestRouter);
+
+            TcpStrategy tcpStrategy = null;
+            UdpStrategy udpStrategy = null;
             CommunicationStrategy internalStrategy;
 
             if (protocol.equalsIgnoreCase("UDP")) {
-                internalStrategy = new UdpStrategy(gatewayRequestHandler);
-
+                udpStrategy     = new UdpStrategy(gatewayRequestHandler);
+                internalStrategy = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
-                HttpParser httpParser = new HttpParser();
-                internalStrategy = new TcpStrategy(gatewayRequestHandler, httpParser);
-
+                tcpStrategy     = new TcpStrategy(gatewayRequestHandler, new HttpParser());
+                internalStrategy = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
-                GrpcMapper grpcMapper = new GrpcMapper();
-                internalStrategy = new GrpcStrategy(gatewayRequestHandler, grpcMapper);
-
+                internalStrategy =
+                    new GrpcStrategy(gatewayRequestHandler, new GrpcMapper());
             } else {
                 System.out.println("Método inválido. Escolha UDP, TCP ou GRPC.");
                 return;
@@ -54,21 +58,35 @@ public class ApiGatewayServer {
 
             requestRouter.setCommunicationStrategy(internalStrategy);
 
-            GossipWorker worker = new GossipWorker(membershipList, internalStrategy, localNode, Executors.newSingleThreadScheduledExecutor());
+            GossipWorker worker = new GossipWorker(
+                membershipList, internalStrategy, localNode,
+                Executors.newSingleThreadScheduledExecutor());
             gatewayRequestHandler.setMembershipList(membershipList);
             gatewayRequestHandler.setGossipWorker(worker);
 
-            GatewayService gatewayService = new GatewayService(requestRouter, membershipList);
+            // GatewayService é o objeto remoto exposto pelo middleware
+            GatewayService gatewayService =
+                new GatewayService(requestRouter, membershipList);
 
-            ProtocolPlugin plugin = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+            ProtocolPlugin pluginImpl =
+                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
-            System.out.println("API Gateway no ar na porta " + gatewayPort +" via " +protocol.toUpperCase());
-
-             new Broker()
+            ProtocolPlugin plugin = new Broker()
                 .register(gatewayService)
                 .addInterceptor(new LoggingInterceptor())
-                .useProtocol(plugin)
-                .start(gatewayPort);
+                .useProtocol(pluginImpl)
+                .build(gatewayPort);
+
+            // Injeta o plugin no strategy — única porta
+            if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
+            if (udpStrategy != null) udpStrategy.setPlugin(plugin);
+
+            final CommunicationStrategy finalStrategy = internalStrategy;
+            new Thread(() -> finalStrategy.startListening(gatewayPort)).start();
+            worker.startBackgroundTest();
+
+            System.out.println("API Gateway no ar na porta " + gatewayPort
+                + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             System.err.println("Erro ao iniciar o API Gateway: " + e.getMessage());

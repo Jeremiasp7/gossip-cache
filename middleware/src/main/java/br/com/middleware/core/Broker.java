@@ -17,13 +17,14 @@ public class Broker {
         this.lookup = new Lookup();
         this.marshaller = new Marshaller(lookup);
         this.invoker = new Invoker(lookup);
-        this.interceptorChain  = new InterceptorChain();
-        this.serverRequestHandler = new ServerRequestHandler(invoker, marshaller, interceptorChain);
+        this.interceptorChain = new InterceptorChain();
+        this.serverRequestHandler = new ServerRequestHandler(
+            invoker, marshaller, interceptorChain);
     }
 
     public Broker register(Object remoteObject) {
         lookup.register(remoteObject);
-        return this; // fluent API para encadear registros
+        return this;
     }
 
     public Broker addInterceptor(InvocationInterceptor interceptor) {
@@ -36,20 +37,23 @@ public class Broker {
         return this;
     }
 
-    public void start(int port) {
-        if (protocol == null) {
-            throw new IllegalStateException("Nenhum protocolo configurado. Chame useProtocol() antes de start().");
-        }
-        
+    public ProtocolPlugin build(int port) {
+        if (protocol == null)
+            throw new IllegalStateException(
+                "Nenhum protocolo configurado. Chame useProtocol() antes de build().");
+
         lookup.getAll().forEach((name, provider) -> {
-            Object object = provider.getInstance();
-            System.out.println(
-                AbsoluteObjectReference.from(object, protocol.getProtocolName(), "localhost", port));
+            // Pega a classe sem instanciar — não consome o pool
+            String objectName = name;
+            String aor = protocol.getProtocolName() + "://localhost:"
+                + port + "/" + objectName;
+            System.out.println("[AOR] " + aor);
         });
 
-        protocol.start(port, serverRequestHandler, marshaller);
+        protocol.init(serverRequestHandler, marshaller);
+        return protocol;
     }
 
-    public Lookup getLookup() { return lookup; }
+    public Lookup getLookup()   { return lookup; }
     public Invoker getInvoker() { return invoker; }
 }

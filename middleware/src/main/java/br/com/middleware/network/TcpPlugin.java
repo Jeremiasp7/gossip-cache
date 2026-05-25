@@ -1,10 +1,7 @@
 package br.com.middleware.network;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
+import java.io.*;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -18,20 +15,20 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
     private Marshaller marshaller;
 
     @Override
-    public void start(int port, ServerRequestHandler srh, Marshaller marshaller) {
+    public void init(ServerRequestHandler srh, Marshaller marshaller) {
         this.srh        = srh;
         this.marshaller = marshaller;
-        listen(port); // delegado para AbstractTcpServer
+        System.out.println("[TcpPlugin] Inicializado");
     }
 
     @Override
-    protected void handleConnection(Socket connection) {
+    public void handleHttpConnection(Socket connection) {
         try {
             connection.setSoTimeout(5000);
             InputStream is  = connection.getInputStream();
             OutputStream os = connection.getOutputStream();
 
-            String requestLine = readLine(is); // reutiliza método da classe base
+            String requestLine = readLine(is);
             if (requestLine == null || requestLine.isEmpty()) return;
 
             HttpRequestParts parts     = parseRequestLine(requestLine);
@@ -66,6 +63,16 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
             try { connection.close(); } catch (IOException ignored) {}
         }
     }
+
+    // UDP não usado no TcpPlugin
+    @Override
+    public void handleUdpPacket(byte[] data, int offset, int length,
+                                InetAddress addr, int port,
+                                DatagramSocket socket) {}
+
+    // Não usado — TcpStrategy é quem abre a porta
+    @Override
+    protected void handleConnection(Socket connection) {}
 
     @Override
     public String getProtocolName() { return "TCP"; }
