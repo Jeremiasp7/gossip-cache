@@ -22,15 +22,17 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
 
     private final RequestHandler handler;
     private final HttpParser httpParser;
-    private ProtocolPlugin plugin; // injetado pelo servidor
-    private final ExecutorService gossipExecutor = Executors.newFixedThreadPool(16);
+    private ProtocolPlugin plugin;
+
+    // Pool dedicado para gossip — nunca bloqueado pelo HTTP
+    private final ExecutorService gossipExecutor =
+        Executors.newFixedThreadPool(16);
 
     public TcpStrategy(RequestHandler handler, HttpParser httpParser) {
         this.handler    = handler;
         this.httpParser = httpParser;
     }
 
-    // Chamado pelo servidor após Broker.build()
     public void setPlugin(ProtocolPlugin plugin) {
         this.plugin = plugin;
     }
@@ -40,34 +42,83 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
         listen(port);
     }
 
+    // Roda no thread do acceptor — lê apenas 1 byte e despacha imediatamente
+    // Nunca bloqueia o loop de accept
     @Override
-    protected void handleConnection(Socket connection) {
-        // Detecta o tipo ANTES de submeter ao executor
+    protected void onAccepted(Socket connection) {
         try {
-            InputStream is = connection.getInputStream();
-            PushbackInputStream pbis = new PushbackInputStream(is, 1);
-            int firstByteInt = pbis.read();
-            if (firstByteInt == -1) { connection.close(); return; }
+            PushbackInputStream pbis =
+                new PushbackInputStream(connection.getInputStream(), 1);
+            int firstByteInt = pbis.read(); // lê 1 byte — muito rápido
+            if (firstByteInt == -1) {
+                connection.close();
+                return;
+            }
 
             byte magicByte = (byte) firstByteInt;
             pbis.unread(firstByteInt);
 
+            SocketWithPushback wrapped = new SocketWithPushback(connection, pbis);
+
             if (magicByte == (byte) -84) {
-                // Gossip/AppRequest — usa pool dedicado, nunca fica atrás do HTTP
-                gossipExecutor.submit(() -> handleSerialized(
-                    new SocketWithPushback(connection, pbis)));
+                // Gossip/AppRequest — pool dedicado, prioridade garantida
+                gossipExecutor.submit(() -> handleSerialized(wrapped));
             } else {
-                // HTTP — usa o executor herdado do AbstractTcpServer
-                if (plugin != null) {
-                    plugin.handleHttpConnection(
-                        new SocketWithPushback(connection, pbis));
-                } else {
-                    handleHttpFallback(connection, pbis);
-                }
+                // HTTP — pool do executor herdado
+                executor.submit(() -> handleHttp(wrapped));
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (IOException e) {
             try { connection.close(); } catch (IOException ignored) {}
+        }
+    }
+
+    private void handleSerialized(Socket connection) {
+        try (InputStream is  = connection.getInputStream();
+             OutputStream os = connection.getOutputStream()) {
+
+            ObjectOutputStream output = new ObjectOutputStream(os);
+            output.flush();
+            ObjectInputStream input   = new ObjectInputStream(is);
+            Object received           = input.readObject();
+
+            if (received instanceof AppRequest) {
+                AppResponse response = handler.handleRequest((AppRequest) received);
+                output.writeObject(response);
+                output.flush();
+            } else if (received instanceof GossipMessage) {
+                handler.handleGossip((GossipMessage) received);
+            }
+
+        } catch (Exception e) {
+            System.err.println("[TcpStrategy] Erro serializado: " + e.getMessage());
+        } finally {
+            try { connection.close(); } catch (IOException ignored) {}
+        }
+    }
+
+    private void handleHttp(Socket connection) {
+        if (plugin != null) {
+            plugin.handleHttpConnection(connection);
+        } else {
+            // Fallback sem middleware
+            try (InputStream is  = connection.getInputStream();
+                 OutputStream os = connection.getOutputStream()) {
+                byte[] inputBytes = new byte[8192];
+                int bytesQuantity = is.read(inputBytes);
+                if (bytesQuantity > 0) {
+                    String inputString    = new String(inputBytes, 0, bytesQuantity);
+                    AppRequest request    = httpParser.requestConvertor(inputString);
+                    AppResponse response  = handler.handleRequest(request);
+                    String responseString = httpParser.responseGenerator(response);
+                    os.write(responseString.getBytes());
+                    os.flush();
+                    connection.shutdownOutput();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                try { connection.close(); } catch (IOException ignored) {}
+            }
         }
     }
 
@@ -100,49 +151,6 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
             output.flush();
         } catch (Exception e) {
             System.err.println("Erro na Fofoca TCP: " + e.getMessage());
-        }
-    }
-
-    private void handleSerialized(Socket connection) {
-        try (InputStream is  = connection.getInputStream();
-            OutputStream os = connection.getOutputStream()) {
-
-            ObjectOutputStream output = new ObjectOutputStream(os);
-            output.flush();
-            ObjectInputStream input   = new ObjectInputStream(is);
-            Object received           = input.readObject();
-
-            if (received instanceof AppRequest) {
-                AppResponse response = handler.handleRequest((AppRequest) received);
-                output.writeObject(response);
-                output.flush();
-            } else if (received instanceof GossipMessage) {
-                handler.handleGossip((GossipMessage) received);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            try { connection.close(); } catch (IOException ignored) {}
-        }
-    }
-
-    private void handleHttpFallback(Socket connection, PushbackInputStream pbis) {
-        try (OutputStream os = connection.getOutputStream()) {
-            byte[] inputBytes = new byte[8192];
-            int bytesQuantity = pbis.read(inputBytes);
-            if (bytesQuantity > 0) {
-                String inputString    = new String(inputBytes, 0, bytesQuantity);
-                AppRequest request    = httpParser.requestConvertor(inputString);
-                AppResponse response  = handler.handleRequest(request);
-                String responseString = httpParser.responseGenerator(response);
-                os.write(responseString.getBytes());
-                os.flush();
-                connection.shutdownOutput();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            try { connection.close(); } catch (IOException ignored) {}
         }
     }
 }

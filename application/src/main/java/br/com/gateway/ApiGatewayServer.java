@@ -26,10 +26,12 @@ public class ApiGatewayServer {
         try {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1];
+            String gatewayHost = InetAddress.getLocalHost().getHostAddress();
+            UUID gatewayUUID   = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
 
             NodeInfo localNode = new NodeInfo(
-                UUID.randomUUID(),
-                InetAddress.getLocalHost().getHostAddress(),
+                gatewayUUID,
+                gatewayHost,
                 gatewayPort, 0, NodeType.GATEWAY);
 
             MembershipList membershipList = new MembershipList(localNode);

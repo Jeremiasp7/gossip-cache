@@ -21,6 +21,7 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
         System.out.println("[TcpPlugin] Inicializado");
     }
 
+    // Chamado pelo TcpStrategy quando detecta HTTP
     @Override
     public void handleHttpConnection(Socket connection) {
         try {
@@ -64,15 +65,16 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
         }
     }
 
+    // TcpPlugin não abre porta — onAccepted nunca é chamado nele
+    // Implementado apenas para satisfazer o contrato do AbstractTcpServer
+    @Override
+    protected void onAccepted(Socket connection) {}
+
     // UDP não usado no TcpPlugin
     @Override
     public void handleUdpPacket(byte[] data, int offset, int length,
                                 InetAddress addr, int port,
                                 DatagramSocket socket) {}
-
-    // Não usado — TcpStrategy é quem abre a porta
-    @Override
-    protected void handleConnection(Socket connection) {}
 
     @Override
     public String getProtocolName() { return "TCP"; }

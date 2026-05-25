@@ -1,6 +1,7 @@
 package br.com.core.model;
 
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 public class NodeInfo implements Serializable {
@@ -20,6 +21,11 @@ public class NodeInfo implements Serializable {
         this.port = port;
         this.lastHeartbeat = lastHeartbeat;
         this.type = type;
+    }
+
+    public static UUID deterministicUUID(String host, int port) {
+        String seed = host + ":" + port;
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8));
     }
 
     //getters and setters

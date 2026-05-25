@@ -32,28 +32,29 @@ public class GatewayRequestHandler implements RequestHandler {
     }
 
     @Override
-    public void handleGossip(GossipMessage gossip) { // the gateway distributes gossip to all nodes
+    public void handleGossip(GossipMessage gossip) {
         NodeInfo sender = gossip.getSourceNode();
 
-        if (membershipList != null && sender != null) {
-            membershipList.updateNode(sender);
+        if (membershipList == null || sender == null) return;
 
-            AppRequest data = gossip.getData();
-            String key = (data != null && data.getKey() != null) ? data.getKey() : "null";
-            System.out.println("[Gateway] Novo nó descoberto via Gossip: " +
-                               sender.getType() + " na porta " + sender.getPort() + " (chave: " + key + ")");
-            System.out.flush();
+        membershipList.updateNode(sender);
 
-            // Repassar gossip para TODOS os peers (exceto a origem)
-            if (gossipWorker != null && gossip.getHopCount() > 0) {
-                System.out.println("[Gateway] Repassando gossip da chave '" + key + "' para TODOS os nós");
-                System.out.flush();
+        AppRequest data = gossip.getData();
+        String key = (data != null && data.getKey() != null)
+            ? data.getKey() : "null";
 
-                for (NodeInfo peer : membershipList.getNodes().values()) {
-                    if (!peer.getSequenceNumber().equals(sender.getSequenceNumber())) {
-                        System.out.println("[Gateway-Rebroadcast] Enviando para " + peer.getType() + " na porta " + peer.getPort());
-                        gossipWorker.spreadGossipToPeer(gossip, peer);
-                    }
+        System.out.println("[Gateway] Heartbeat de " + sender.getType()
+            + " na porta " + sender.getPort() + " (chave: " + key + ")");
+        System.out.flush();
+
+        // Rebroadcast APENAS para gossip de dados — não para heartbeats (key == null)
+        if (gossipWorker != null && gossip.getHopCount() > 0
+                && data != null && data.getKey() != null) {
+            System.out.println("[Gateway] Repassando gossip da chave '"
+                + key + "' para todos os nós");
+            for (NodeInfo peer : membershipList.getNodes().values()) {
+                if (!peer.getSequenceNumber().equals(sender.getSequenceNumber())) {
+                    gossipWorker.spreadGossipToPeer(gossip, peer);
                 }
             }
         }

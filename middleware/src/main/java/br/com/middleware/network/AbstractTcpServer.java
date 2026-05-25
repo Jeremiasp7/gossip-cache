@@ -15,7 +15,9 @@ public abstract class AbstractTcpServer {
 
     protected final ExecutorService executor = Executors.newFixedThreadPool(32);
 
-    protected abstract void handleConnection(Socket connection);
+    // Subclasses implementam o que fazer DEPOIS que a conexão foi aceita
+    // Este método roda no thread do acceptor — deve ser rápido e não bloquear
+    protected abstract void onAccepted(Socket connection);
 
     protected void listen(int port) {
         new Thread(() -> {
@@ -24,7 +26,7 @@ public abstract class AbstractTcpServer {
                     + "] Escutando na porta " + port);
                 while (true) {
                     Socket connection = server.accept();
-                    executor.submit(() -> handleConnection(connection));
+                    onAccepted(connection); // ← sem executor aqui
                 }
             } catch (IOException e) {
                 System.err.println("[" + getClass().getSimpleName()
@@ -33,14 +35,15 @@ public abstract class AbstractTcpServer {
         }, getClass().getSimpleName() + "-acceptor").start();
     }
 
+    // Mantido para compatibilidade — TcpPlugin pode continuar usando se quiser
+    protected void handleConnection(Socket connection) {}
+
+    // demais métodos utilitários permanecem iguais
     protected String readLine(InputStream is) throws IOException {
         StringBuilder sb = new StringBuilder();
         int b;
         while ((b = is.read()) != -1) {
-            if (b == '\r') {
-                is.read();
-                break;
-            }
+            if (b == '\r') { is.read(); break; }
             sb.append((char) b);
         }
         return sb.toString();
@@ -73,24 +76,19 @@ public abstract class AbstractTcpServer {
         String[] parts    = requestLine.split(" ");
         String httpMethod = parts[0];
         String fullUrl    = parts[1];
-
         String path  = fullUrl.contains("?") ? fullUrl.split("\\?")[0] : fullUrl;
         String query = fullUrl.contains("?") ? fullUrl.split("\\?")[1] : "";
-
         String[] segments = path.split("/");
         String objectName = segments.length > 1 ? segments[1] : "";
         String methodPath = segments.length > 2 ? segments[2] : "";
-
         return new HttpRequestParts(httpMethod, objectName, methodPath, query);
     }
 
-    // DTO interno para partes da requisição HTTP
     protected static class HttpRequestParts {
         public final String httpMethod;
         public final String objectName;
         public final String methodPath;
         public final String query;
-
         public HttpRequestParts(String httpMethod, String objectName,
                                 String methodPath, String query) {
             this.httpMethod = httpMethod;

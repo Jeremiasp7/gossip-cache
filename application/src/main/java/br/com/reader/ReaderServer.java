@@ -37,10 +37,10 @@ public class ReaderServer {
             MembershipList membershipList = new MembershipList(localNode);
 
             if (gatewayPort != null) {
+                String gatewayHost = InetAddress.getLocalHost().getHostAddress();
+                UUID gatewayUUID   = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
                 NodeInfo gatewayNode = new NodeInfo(
-                    UUID.randomUUID(),
-                    InetAddress.getLocalHost().getHostAddress(),
-                    gatewayPort, 0, NodeType.GATEWAY);
+                    gatewayUUID, gatewayHost, gatewayPort, 0, NodeType.GATEWAY);
                 membershipList.updateNode(gatewayNode);
                 System.out.println("Gateway descoberto na porta " + gatewayPort);
             }
