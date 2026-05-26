@@ -21,12 +21,12 @@ public abstract class AbstractTcpServer {
 
     protected void listen(int port) {
         new Thread(() -> {
-            try (ServerSocket server = new ServerSocket(port)) {
+            try (ServerSocket server = new ServerSocket(port, 200)) { // ← backlog 200
                 System.out.println("[" + getClass().getSimpleName()
                     + "] Escutando na porta " + port);
                 while (true) {
                     Socket connection = server.accept();
-                    onAccepted(connection); // ← sem executor aqui
+                    onAccepted(connection);
                 }
             } catch (IOException e) {
                 System.err.println("[" + getClass().getSimpleName()

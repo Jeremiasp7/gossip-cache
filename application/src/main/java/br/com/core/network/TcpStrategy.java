@@ -124,20 +124,45 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
 
     @Override
     public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) {
-        try (Socket socket = new Socket(
-                destinationNode.getAddress(), destinationNode.getPort())) {
-            socket.setSoTimeout(5000);
-            ObjectOutputStream output =
-                new ObjectOutputStream(socket.getOutputStream());
-            output.flush();
-            ObjectInputStream input =
-                new ObjectInputStream(socket.getInputStream());
-            output.writeObject(request);
-            output.flush();
-            return (AppResponse) input.readObject();
-        } catch (Exception e) {
-            return new AppResponse("500", null, "Erro Interno de Comunicação no Cluster");
+        int maxRetries = 3;
+        int delayMs    = 100;
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try (Socket socket = new Socket(
+                    destinationNode.getAddress(), destinationNode.getPort())) {
+
+                socket.setSoTimeout(5000);
+                ObjectOutputStream output =
+                    new ObjectOutputStream(socket.getOutputStream());
+                output.flush();
+                ObjectInputStream input =
+                    new ObjectInputStream(socket.getInputStream());
+                output.writeObject(request);
+                output.flush();
+                return (AppResponse) input.readObject();
+
+            } catch (java.net.ConnectException e) {
+                // Nó inacessível — retry com backoff
+                System.err.println("[TcpStrategy] Tentativa " + attempt
+                    + "/" + maxRetries + " falhou para porta "
+                    + destinationNode.getPort() + ": " + e.getMessage());
+
+                if (attempt < maxRetries) {
+                    try { Thread.sleep(delayMs * attempt); } // 100ms, 200ms
+                    catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                // Erro não transitório — não faz sentido retry
+                System.err.println("[TcpStrategy] Erro não transitório: "
+                    + e.getMessage());
+                break;
+            }
         }
+
+        return new AppResponse("500", null, "Erro Interno de Comunicação no Cluster");
     }
 
     @Override
