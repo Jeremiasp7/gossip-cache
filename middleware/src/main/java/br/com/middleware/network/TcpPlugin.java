@@ -46,8 +46,12 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
                 parts.httpMethod, parts.objectName, parts.methodPath, params);
             String body = srh.handle(request);
 
+            // Se o body contém erro, retorna 503 para o JMeter contabilizar
+            boolean isError = body.contains("\"error\"");
+            String httpStatus = isError ? "503 Service Unavailable" : "200 OK";
+
             byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-            String response  = "HTTP/1.1 200 OK\r\n"
+            String response  = "HTTP/1.1 " + httpStatus + "\r\n"
                 + "Content-Type: application/json\r\n"
                 + "Content-Length: " + bodyBytes.length + "\r\n"
                 + "Connection: close\r\n"

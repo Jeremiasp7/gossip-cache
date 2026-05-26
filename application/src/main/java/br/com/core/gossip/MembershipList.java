@@ -17,7 +17,7 @@ public class MembershipList {
     private CopyOnWriteArrayList<NodeInfo> writerNodes; // writers list
     private CopyOnWriteArrayList<NodeInfo> gatewayNodes; //gateways list
     private final ConcurrentHashMap<UUID, Long> removedNodes = new ConcurrentHashMap<>();
-    private static final long TOMBSTONE_TTL = 60_000; // 60 segundos
+    private static final long TOMBSTONE_TTL = 30_000; // 30 segundos
     
     public MembershipList(NodeInfo localNode) {
         this.localNode = localNode;

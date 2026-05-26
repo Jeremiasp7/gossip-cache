@@ -26,10 +26,14 @@ public class GatewayService {
 
     @MethodMapping(method = MethodHTTP.POST, path = "post")
     public String post(@Param(name = "key") String key,
-                       @Param(name = "value") String value) {
-        AppRequest request = new AppRequest(
-            Operation.POST, key, value.getBytes());
+                    @Param(name = "value") String value) {
+        AppRequest request = new AppRequest(Operation.POST, key, value.getBytes());
         AppResponse response = requestRouter.routeRequest(request);
+
+        if (!"200".equals(response.getStatus())) {
+            throw new RuntimeException(response.getStatus()
+                + " - " + response.getMessage());
+        }
         return response.getStatus() + " - " + response.getMessage();
     }
 
@@ -37,6 +41,11 @@ public class GatewayService {
     public String get(@Param(name = "key") String key) {
         AppRequest request = new AppRequest(Operation.GET, key, null);
         AppResponse response = requestRouter.routeRequest(request);
+
+        if (!"200".equals(response.getStatus())) {
+            throw new RuntimeException(response.getStatus()
+                + " - " + response.getMessage());
+        }
         if (response.getValue() == null) return "null";
         return new String(response.getValue());
     }
