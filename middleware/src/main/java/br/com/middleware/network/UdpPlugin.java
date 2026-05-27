@@ -59,4 +59,10 @@ public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
 
     @Override
     public String getProtocolName() { return "UDP"; }
+
+    @Override
+    public ServerRequestHandler getServerRequestHandler() { return srh; }
+
+    @Override
+    public Marshaller getMarshaller() { return marshaller; }
 }

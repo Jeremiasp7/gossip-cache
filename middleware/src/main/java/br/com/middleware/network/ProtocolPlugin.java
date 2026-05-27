@@ -19,4 +19,7 @@ public interface ProtocolPlugin {
                          java.net.DatagramSocket socket);
 
     String getProtocolName();
+
+    ServerRequestHandler getServerRequestHandler();
+    Marshaller getMarshaller();
 }

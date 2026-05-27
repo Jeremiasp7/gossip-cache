@@ -82,4 +82,10 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
 
     @Override
     public String getProtocolName() { return "TCP"; }
+
+    @Override
+    public ServerRequestHandler getServerRequestHandler() { return srh; }
+
+    @Override
+    public Marshaller getMarshaller() { return marshaller; }
 }

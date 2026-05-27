@@ -7,6 +7,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PushbackInputStream;
 import java.net.Socket;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -14,6 +15,7 @@ import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
+import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 import br.com.middleware.network.AbstractTcpServer;
 import br.com.middleware.network.ProtocolPlugin;
@@ -74,7 +76,7 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
 
     private void handleSerialized(Socket connection) {
         try (InputStream is  = connection.getInputStream();
-             OutputStream os = connection.getOutputStream()) {
+            OutputStream os = connection.getOutputStream()) {
 
             ObjectOutputStream output = new ObjectOutputStream(os);
             output.flush();
@@ -82,9 +84,44 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
             Object received           = input.readObject();
 
             if (received instanceof AppRequest) {
-                AppResponse response = handler.handleRequest((AppRequest) received);
-                output.writeObject(response);
-                output.flush();
+                AppRequest appRequest = (AppRequest) received;
+
+                // Se o plugin está disponível, roteia pelo middleware
+                if (plugin != null) {
+                    String httpMethod  = operationToHttpMethod(appRequest.getOperation());
+                    String methodPath  = operationToPath(appRequest.getOperation());
+
+                    // Monta os parâmetros como o Marshaller espera
+                    Map<String, String> params = new java.util.LinkedHashMap<>();
+                    if (appRequest.getKey() != null)
+                        params.put("key", appRequest.getKey());
+                    if (appRequest.getValue() != null)
+                        params.put("value", new String(
+                            appRequest.getValue(), java.nio.charset.StandardCharsets.UTF_8));
+
+                    br.com.middleware.dto.InvocationRequest invocationRequest =
+                        plugin.getMarshaller().unmarshal(
+                            httpMethod, "dictionary", methodPath, params);
+
+                    String resultBody =
+                        plugin.getServerRequestHandler().handle(invocationRequest);
+
+                    // Converte o resultado de volta para AppResponse
+                    AppResponse response;
+                    if (resultBody.contains("\"error\"")) {
+                        response = new AppResponse("500", null, resultBody);
+                    } else {
+                        byte[] resultBytes = resultBody != null && !resultBody.equals("null")
+                            ? resultBody.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                            : null;
+                        response = new AppResponse("200", resultBytes, "OK");
+                    }
+
+                    output.writeObject(response);
+                    output.flush();
+
+                }
+
             } else if (received instanceof GossipMessage) {
                 handler.handleGossip((GossipMessage) received);
             }
@@ -97,29 +134,7 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
     }
 
     private void handleHttp(Socket connection) {
-        if (plugin != null) {
-            plugin.handleHttpConnection(connection);
-        } else {
-            // Fallback sem middleware
-            try (InputStream is  = connection.getInputStream();
-                 OutputStream os = connection.getOutputStream()) {
-                byte[] inputBytes = new byte[8192];
-                int bytesQuantity = is.read(inputBytes);
-                if (bytesQuantity > 0) {
-                    String inputString    = new String(inputBytes, 0, bytesQuantity);
-                    AppRequest request    = httpParser.requestConvertor(inputString);
-                    AppResponse response  = handler.handleRequest(request);
-                    String responseString = httpParser.responseGenerator(response);
-                    os.write(responseString.getBytes());
-                    os.flush();
-                    connection.shutdownOutput();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                try { connection.close(); } catch (IOException ignored) {}
-            }
-        }
+        plugin.handleHttpConnection(connection);
     }
 
     @Override
@@ -176,6 +191,25 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
             output.flush();
         } catch (Exception e) {
             System.err.println("Erro na Fofoca TCP: " + e.getMessage());
+        }
+    }
+
+    private String operationToPath(Operation operation) {
+        switch (operation) {
+            case GET:    return "get";
+            case POST:
+            case PUT:    return "post";
+            default: throw new RuntimeException("Operação não mapeada: " + operation);
+        }
+    }
+
+    private String operationToHttpMethod(Operation operation) {
+        switch (operation) {
+            case GET:    return "GET";
+            case POST:
+            case PUT:    return "POST";
+            case DELETE: return "POST"; // deleteLocalData é chamado via POST no DictionaryStorage
+            default: throw new RuntimeException("Operação não mapeada: " + operation);
         }
     }
 }
