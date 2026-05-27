@@ -14,6 +14,14 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
     private ServerRequestHandler srh;
     private Marshaller marshaller;
 
+    // Tempo máximo de inatividade antes de fechar a conexão keep-alive (segundos).
+    // Anunciado ao cliente via header "Keep-Alive: timeout=N" para que ele feche
+    // antes do servidor — elimina a race condition de socket morto.
+    private static final int KEEPALIVE_TIMEOUT_SECONDS = 30;
+
+    // Número máximo de requests por conexão keep-alive.
+    private static final int MAX_KEEPALIVE_REQUESTS = 1000;
+
     @Override
     public void init(ServerRequestHandler srh, Marshaller marshaller) {
         this.srh        = srh;
@@ -21,47 +29,91 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
         System.out.println("[TcpPlugin] Inicializado");
     }
 
-    // Chamado pelo TcpStrategy quando detecta HTTP
     @Override
     public void handleHttpConnection(Socket connection) {
         try {
-            connection.setSoTimeout(5000);
-            InputStream is  = connection.getInputStream();
+            connection.setSoTimeout((KEEPALIVE_TIMEOUT_SECONDS + 2) * 1000);
+
+            InputStream  is = connection.getInputStream();
             OutputStream os = connection.getOutputStream();
 
-            String requestLine = readLine(is);
-            if (requestLine == null || requestLine.isEmpty()) return;
+            int requestCount = 0;
+            boolean keepAlive = true;
 
-            HttpRequestParts parts     = parseRequestLine(requestLine);
-            int contentLength          = readHeaders(is);
-            Map<String, String> params = parseQuery(parts.query);
+            while (keepAlive && requestCount < MAX_KEEPALIVE_REQUESTS) {
 
-            if (contentLength > 0) {
-                byte[] bodyBytes = is.readNBytes(contentLength);
-                params.putAll(parseQuery(
-                    new String(bodyBytes, StandardCharsets.UTF_8)));
+                String requestLine = readLine(is);
+                if (requestLine == null || requestLine.isEmpty()) break;
+
+                HttpRequestParts parts = parseRequestLine(requestLine);
+
+                boolean clientWantsClose = false;
+                int contentLength = 0;
+                String line;
+                while (!(line = readLine(is)).isEmpty()) {
+                    String lower = line.toLowerCase();
+                    if (lower.startsWith("content-length:"))
+                        contentLength = Integer.parseInt(line.split(":", 2)[1].trim());
+                    if (lower.startsWith("connection:") && lower.contains("close"))
+                        clientWantsClose = true;
+                }
+
+                keepAlive = !clientWantsClose;
+
+                Map<String, String> params = parseQuery(parts.query);
+                if (contentLength > 0) {
+                    byte[] bodyBytes = is.readNBytes(contentLength);
+                    params.putAll(parseQuery(
+                        new String(bodyBytes, StandardCharsets.UTF_8)));
+                }
+
+                InvocationRequest request = marshaller.unmarshal(
+                    parts.httpMethod, parts.objectName, parts.methodPath, params);
+                String body = srh.handle(request);
+
+                boolean isError = body.contains("\"error\"");
+                String httpStatus = isError ? "503 Service Unavailable" : "200 OK";
+                byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+
+                requestCount++;
+
+                // Fecha na última iteração permitida para dar ao cliente
+                // a chance de ver o "Connection: close" antes de reenviar.
+                boolean lastRequest = !keepAlive
+                        || requestCount >= MAX_KEEPALIVE_REQUESTS;
+
+                String connectionHeader;
+                String keepAliveHeader = "";
+
+                if (lastRequest) {
+                    connectionHeader = "Connection: close\r\n";
+                } else {
+                    // Anuncia o timeout exato para o cliente fechar antes do servidor.
+                    // O JMeter respeita esse header e expira a conexão do seu lado
+                    // KEEPALIVE_TIMEOUT_SECONDS antes do servidor fechar —
+                    // eliminando a race condition que causava o SocketException de 1%.
+                    connectionHeader = "Connection: keep-alive\r\n";
+                    keepAliveHeader  = "Keep-Alive: timeout=" + KEEPALIVE_TIMEOUT_SECONDS
+                                       + ", max=" + (MAX_KEEPALIVE_REQUESTS - requestCount)
+                                       + "\r\n";
+                }
+
+                String response = "HTTP/1.1 " + httpStatus + "\r\n"
+                    + "Content-Type: application/json\r\n"
+                    + "Content-Length: " + bodyBytes.length + "\r\n"
+                    + connectionHeader
+                    + keepAliveHeader
+                    + "\r\n";
+
+                os.write(response.getBytes(StandardCharsets.UTF_8));
+                os.write(bodyBytes);
+                os.flush();
             }
 
-            InvocationRequest request = marshaller.unmarshal(
-                parts.httpMethod, parts.objectName, parts.methodPath, params);
-            String body = srh.handle(request);
-
-            // Se o body contém erro, retorna 503 para o JMeter contabilizar
-            boolean isError = body.contains("\"error\"");
-            String httpStatus = isError ? "503 Service Unavailable" : "200 OK";
-
-            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-            String response  = "HTTP/1.1 " + httpStatus + "\r\n"
-                + "Content-Type: application/json\r\n"
-                + "Content-Length: " + bodyBytes.length + "\r\n"
-                + "Connection: close\r\n"
-                + "\r\n";
-            os.write(response.getBytes(StandardCharsets.UTF_8));
-            os.write(bodyBytes);
-            os.flush();
-
         } catch (SocketTimeoutException e) {
-            System.err.println("[TcpPlugin] Timeout: " + e.getMessage());
+            // Inatividade normal — cliente já fechou ou ficou silencioso
+        } catch (EOFException | SocketException e) {
+            // Cliente fechou a conexão — esperado em keep-alive
         } catch (Exception e) {
             System.err.println("[TcpPlugin] Erro: " + e.getMessage());
         } finally {
@@ -69,12 +121,9 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
         }
     }
 
-    // TcpPlugin não abre porta — onAccepted nunca é chamado nele
-    // Implementado apenas para satisfazer o contrato do AbstractTcpServer
     @Override
     protected void onAccepted(Socket connection) {}
 
-    // UDP não usado no TcpPlugin
     @Override
     public void handleUdpPacket(byte[] data, int offset, int length,
                                 InetAddress addr, int port,

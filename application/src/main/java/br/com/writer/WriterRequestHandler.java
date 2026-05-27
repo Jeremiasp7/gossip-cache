@@ -7,19 +7,30 @@ import br.com.core.model.AppResponse;
 import br.com.core.model.DictionaryStorage;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
-import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 
 public class WriterRequestHandler implements RequestHandler {
 
     private DictionaryStorage dictionaryStorage;
     private GossipWorker gossipWorker;
-    private NodeInfo localNode; // maybe a problem explodes here
+    private NodeInfo localNode;
     private MembershipList membershipList;
 
-    public WriterRequestHandler(DictionaryStorage storage, MembershipList membershipList) {
+    // -------------------------------------------------------------------------
+    // hopCount para gossip de dados.
+    //
+    // Problema original: hopCount=2 com fan-out=3 gerava até 3 + 9 = 12
+    // conexões TCP por operação de escrita.  Reduzido para 1: cada operação
+    // abre no máximo 3 conexões (os 3 peers diretos).  O Gateway já faz o
+    // rebroadcast explícito para todos os nós em GatewayRequestHandler, então
+    // não há perda de cobertura.
+    // -------------------------------------------------------------------------
+    private static final int DATA_GOSSIP_HOP_COUNT = 1;
+
+    public WriterRequestHandler(DictionaryStorage storage,
+                                MembershipList membershipList) {
         this.dictionaryStorage = storage;
-        this.membershipList = membershipList;
+        this.membershipList    = membershipList;
     }
 
     public void setGossipWorker(GossipWorker gossipWorker) {
@@ -29,59 +40,77 @@ public class WriterRequestHandler implements RequestHandler {
     public void setLocalNode(NodeInfo localNode) {
         this.localNode = localNode;
     }
-    
+
     @Override
     public AppResponse handleRequest(AppRequest request) {
+        System.out.printf(
+                "[Writer porta %s] Processando %s para chave '%s'%n",
+                localNode != null ? localNode.getPort() : "?",
+                request.getOperation(),
+                request.getKey());
 
-        System.out.println("[Writer na porta " + (localNode != null ? localNode.getPort() : "?") + "] Processando requisição " + request.getOperation() + " para a chave: '" + request.getKey() + "'");
+        switch (request.getOperation()) {
+            case POST:
+            case PUT:
+                dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
+                spreadToNetwork(request);
+                return new AppResponse("200", request.getValue(), "OK");
 
-        if(request.getOperation() == Operation.POST || request.getOperation() == Operation.PUT) {
+            case DELETE:
+                dictionaryStorage.deleteLocalData(request.getKey());
+                spreadToNetwork(request);
+                return new AppResponse("200", request.getValue(), "OK");
 
-            dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
-            
-            spreadToNetwork(request);
-            
-            return new AppResponse("200", request.getValue(), "OK");
-
-        } else if (request.getOperation() == Operation.DELETE) {
-
-            dictionaryStorage.deleteLocalData(request.getKey());
-            
-            spreadToNetwork(request);
-            
-            return new AppResponse("200", request.getValue(), "OK");
-
-        } else {
-            return new AppResponse("405", null, "Method Not Allowed");
+            default:
+                return new AppResponse("405", null, "Method Not Allowed");
         }
     }
 
     private void spreadToNetwork(AppRequest request) {
-        if (gossipWorker != null && localNode != null) {
-            System.out.println("[Writer na porta " + localNode.getPort() + "] Propagando chave '" + request.getKey() + "' para a rede via gossip");
-            System.out.flush();
-            GossipMessage gossip = new GossipMessage(localNode, localNode.getSequenceNumber(), request, 2);
-            gossipWorker.spreadGossip(gossip);
-        } else {
+        if (gossipWorker == null || localNode == null) {
             System.out.println("[Writer] ERRO: gossipWorker ou localNode é nulo!");
+            return;
         }
+
+        System.out.printf(
+                "[Writer porta %d] Propagando chave '%s' via gossip (hopCount=%d)%n",
+                localNode.getPort(), request.getKey(), DATA_GOSSIP_HOP_COUNT);
+        System.out.flush();
+
+        // hopCount reduzido de 2 para 1: limita o fan-out a 3 conexões por escrita
+        GossipMessage gossip = new GossipMessage(
+                localNode,
+                localNode.getSequenceNumber(),
+                request,
+                DATA_GOSSIP_HOP_COUNT);
+
+        gossipWorker.spreadGossip(gossip);
     }
 
     @Override
-    public void handleGossip(GossipMessage gossip) { 
-
-        NodeInfo sender = gossip.getSourceNode(); 
+    public void handleGossip(GossipMessage gossip) {
+        NodeInfo sender = gossip.getSourceNode();
         membershipList.updateNode(sender);
 
         AppRequest request = gossip.getData();
 
-        if (request != null && request.getKey() != null) {
-            System.out.println("O Reader acaba de salvar a chave: '" + request.getKey() + "'!");
-            if (request.getOperation() == Operation.POST || request.getOperation() == Operation.PUT) {
+        // Ignora heartbeats (chave null) — não há dado para persistir
+        if (request == null || request.getKey() == null) return;
+
+        System.out.printf("[Writer] Salvando chave '%s' recebida via gossip%n",
+                request.getKey());
+
+        switch (request.getOperation()) {
+            case POST:
+            case PUT:
                 dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
-            } else if (request.getOperation() == Operation.DELETE) {
+                break;
+            case DELETE:
                 dictionaryStorage.deleteLocalData(request.getKey());
-            }
+                break;
+            default:
+                // GET via gossip não faz sentido — ignora silenciosamente
+                break;
         }
     }
 }

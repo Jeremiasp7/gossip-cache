@@ -83,6 +83,9 @@ public class ApiGatewayServer {
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 
+            if (tcpStrategy != null)
+                membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
+
             final CommunicationStrategy finalStrategy = internalStrategy;
             new Thread(() -> finalStrategy.startListening(gatewayPort)).start();
             worker.startBackgroundTest();

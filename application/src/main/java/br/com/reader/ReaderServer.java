@@ -85,6 +85,9 @@ public class ReaderServer {
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 
+            if (tcpStrategy != null)
+                membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
+
             final CommunicationStrategy finalStrategy = strategy;
             new Thread(() -> finalStrategy.startListening(port)).start();
             worker.startBackgroundTest();

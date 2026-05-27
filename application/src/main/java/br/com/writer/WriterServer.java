@@ -88,6 +88,9 @@ public class WriterServer {
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 
+            if (tcpStrategy != null)
+                membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
+
             // Strategy é o único listener na porta
             final CommunicationStrategy finalStrategy = strategy;
             new Thread(() -> finalStrategy.startListening(port)).start();
