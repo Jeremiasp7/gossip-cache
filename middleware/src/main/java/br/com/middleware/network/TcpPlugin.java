@@ -5,14 +5,11 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import br.com.middleware.core.Marshaller;
 import br.com.middleware.core.ServerRequestHandler;
-import br.com.middleware.dto.InvocationRequest;
 
 public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
 
     private ServerRequestHandler srh;
-    private Marshaller marshaller;
 
     // allows the client to close the connection before the server
     private static final int KEEPALIVE_TIMEOUT_SECONDS = 30;
@@ -21,9 +18,8 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
     private static final int MAX_KEEPALIVE_REQUESTS = 1000;
 
     @Override
-    public void init(ServerRequestHandler srh, Marshaller marshaller) {
+    public void init(ServerRequestHandler srh) {
         this.srh        = srh;
-        this.marshaller = marshaller;
         System.out.println("[TcpPlugin] Inicializado");
     }
 
@@ -65,9 +61,12 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
                         new String(bodyBytes, StandardCharsets.UTF_8)));
                 }
 
-                InvocationRequest request = marshaller.unmarshal(
-                    parts.httpMethod, parts.objectName, parts.methodPath, params);
-                String body = srh.handle(request);
+                String body = srh.handle(
+                    parts.httpMethod,
+                    parts.objectName,
+                    parts.methodPath,
+                    params
+                );
 
                 boolean isError = body.contains("\"error\"");
                 String httpStatus = isError ? "503 Service Unavailable" : "200 OK";
@@ -125,6 +124,4 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
     @Override
     public ServerRequestHandler getServerRequestHandler() { return srh; }
 
-    @Override
-    public Marshaller getMarshaller() { return marshaller; }
 }

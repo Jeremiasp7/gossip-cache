@@ -11,7 +11,6 @@ import br.com.core.model.NodeType;
 import br.com.core.network.CommunicationStrategy;
 import br.com.core.network.GrpcMapper;
 import br.com.core.network.GrpcStrategy;
-import br.com.core.network.HttpParser;
 import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
 import br.com.middleware.core.Broker;
@@ -47,7 +46,7 @@ public class ApiGatewayServer {
                 udpStrategy     = new UdpStrategy(gatewayRequestHandler);
                 internalStrategy = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
-                tcpStrategy     = new TcpStrategy(gatewayRequestHandler, new HttpParser());
+                tcpStrategy = new TcpStrategy(gatewayRequestHandler);
                 internalStrategy = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
                 internalStrategy =
@@ -65,7 +64,7 @@ public class ApiGatewayServer {
             gatewayRequestHandler.setMembershipList(membershipList);
             gatewayRequestHandler.setGossipWorker(worker);
 
-            GatewayService gatewayService = new GatewayService(requestRouter, membershipList);
+            GatewayService gatewayService = new GatewayService(requestRouter);
 
             ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 

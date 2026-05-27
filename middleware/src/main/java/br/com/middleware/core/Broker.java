@@ -43,14 +43,13 @@ public class Broker {
                 "Nenhum protocolo configurado. Chame useProtocol() antes de build().");
 
         lookup.getAll().forEach((name, provider) -> {
-            // Pega a classe sem instanciar — não consome o pool
             String objectName = name;
             String aor = protocol.getProtocolName() + "://localhost:"
                 + port + "/" + objectName;
             System.out.println("[AOR] " + aor);
         });
 
-        protocol.init(serverRequestHandler, marshaller);
+        protocol.init(serverRequestHandler);
         return protocol;
     }
 

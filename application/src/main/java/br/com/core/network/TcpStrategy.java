@@ -24,14 +24,12 @@ import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
 import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
-import br.com.middleware.dto.InvocationRequest;
 import br.com.middleware.network.AbstractTcpServer;
 import br.com.middleware.network.ProtocolPlugin;
 
 public class TcpStrategy extends AbstractTcpServer implements CommunicationStrategy {
 
     private final RequestHandler handler;
-    private final HttpParser httpParser;
     private ProtocolPlugin plugin;
 
     private final ExecutorService gossipExecutor = Executors.newFixedThreadPool(16);
@@ -62,9 +60,8 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
         return socket;
     }
 
-    public TcpStrategy(RequestHandler handler, HttpParser httpParser) {
+    public TcpStrategy(RequestHandler handler) {
         this.handler    = handler;
-        this.httpParser = httpParser;
     }
 
     public void setPlugin(ProtocolPlugin plugin) {
@@ -125,11 +122,9 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
                         params.put("value", new String(
                                 appRequest.getValue(),
                                 StandardCharsets.UTF_8));
-
-                    InvocationRequest invocationRequest = plugin.getMarshaller()
-                                    .unmarshal(httpMethod, "dictionary", methodPath, params);
-
-                    String resultBody = plugin.getServerRequestHandler().handle(invocationRequest);
+                    
+                    String resultBody = plugin.getServerRequestHandler()
+                        .handle(httpMethod, "dictionary", methodPath, params);
 
                     AppResponse response;
                     if (resultBody.contains("\"error\"")) {

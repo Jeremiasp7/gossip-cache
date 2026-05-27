@@ -1,5 +1,7 @@
 package br.com.middleware.core;
 
+import java.util.Map;
+
 import br.com.middleware.dto.InvocationReply;
 import br.com.middleware.dto.InvocationRequest;
 import br.com.middleware.interceptor.InterceptorChain;
@@ -17,30 +19,35 @@ public class ServerRequestHandler {
         this.interceptorChain = interceptionChain;
     }
 
-    public String handle(InvocationRequest request) {
+    public String handle(String httpMethod, String objectName, String methodPath, Map<String, String> params) {
+        try {
+            InvocationRequest request = marshaller.unmarshal(httpMethod, objectName, methodPath, params);
 
-        InvocationContext ctx = new InvocationContext(
-            request.getObjectId().getResourceName(),
-            request.getMethodPath(),
-            request.getHttpMethod(),
-            request.getParamsAsMap()
-        );
+            InvocationContext ctx = new InvocationContext(
+                request.getObjectId().getResourceName(),
+                request.getMethodPath(),
+                request.getHttpMethod(),
+                request.getParamsAsMap()
+            );
 
-        if (!interceptorChain.runBefore(ctx)) {
-            String err = (String) ctx.getAttribute("authError");
-            return "{\"error\": \""
-                + (err != null ? err : "Requisição bloqueada") + "\"}";
+            if (!interceptorChain.runBefore(ctx)) {
+                String err = (String) ctx.getAttribute("authError");
+                return "{\"error\": \"" + (err != null ? err : "Requisição bloqueada") + "\"}";
+            }
+
+            InvocationReply reply = invoker.invoke(request);
+
+            if (reply.getErrorMessage() != null) {
+                interceptorChain.runOnError(ctx, new RuntimeException(reply.getErrorMessage()));
+                return "{\"error\": \"" + reply.getErrorMessage() + "\"}";
+            }
+
+            interceptorChain.runAfter(ctx, reply.getResult());
+
+            return marshaller.marshal(reply.getResult());
+
+        } catch (Exception e) {
+            return "{\"error\": \"Erro interno: " + e.getMessage() + "\"}";
         }
-
-        InvocationReply reply = invoker.invoke(request);
-
-        if (reply.getErrorMessage() != null) {
-            interceptorChain.runOnError(ctx,
-                new RuntimeException(reply.getErrorMessage()));
-            return "{\"error\": \"" + reply.getErrorMessage() + "\"}";
-        }
-
-        interceptorChain.runAfter(ctx, reply.getResult());
-        return marshaller.marshal(reply.getResult());
     }
 }

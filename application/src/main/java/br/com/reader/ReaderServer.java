@@ -12,7 +12,6 @@ import br.com.core.model.NodeType;
 import br.com.core.network.CommunicationStrategy;
 import br.com.core.network.GrpcMapper;
 import br.com.core.network.GrpcStrategy;
-import br.com.core.network.HttpParser;
 import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
 import br.com.middleware.core.Broker;
@@ -56,8 +55,8 @@ public class ReaderServer {
                 udpStrategy = new UdpStrategy(readHandler);
                 strategy    = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
-                tcpStrategy = new TcpStrategy(readHandler, new HttpParser());
-                strategy    = tcpStrategy;
+                tcpStrategy = new TcpStrategy(readHandler);
+                strategy = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
                 strategy = new GrpcStrategy(readHandler, new GrpcMapper());
             } else {
