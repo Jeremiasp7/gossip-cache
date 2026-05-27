@@ -74,6 +74,9 @@ public class ApiGatewayServer {
                 .useProtocol(pluginImpl)
                 .build(gatewayPort);
 
+            Broker broker = new Broker();
+            gatewayService.setBroker(broker);
+
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 

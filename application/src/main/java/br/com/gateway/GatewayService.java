@@ -9,15 +9,33 @@ import br.com.middleware.annotations.MethodHTTP;
 import br.com.middleware.annotations.MethodMapping;
 import br.com.middleware.annotations.Param;
 import br.com.middleware.annotations.RemoteObject;
+import br.com.middleware.core.AbsoluteObjectReference;
+import br.com.middleware.core.Broker;
 
 @RemoteObject(name = "gateway")
 @Lifecycle(value = LifecycleMode.STATIC)
 public class GatewayService {
 
     private final RequestRouter requestRouter;
+    private Broker broker;
 
     public GatewayService(RequestRouter requestRouter) {
         this.requestRouter  = requestRouter;
+    }
+
+    public void setBroker(Broker broker) {
+        this.broker = broker;
+    }
+
+    @MethodMapping(method = MethodHTTP.GET, path = "aor")
+    public String getAor(@Param(name = "object") String objectName) {
+        if (broker == null) return "{\"error\": \"Broker não configurado\"}";
+        try {
+            AbsoluteObjectReference aor = broker.getAor(objectName);
+            return aor.toBaseUrl();
+        } catch (Exception e) {
+            return "{\"error\": \"" + e.getMessage() + "\"}";
+        }
     }
 
     @MethodMapping(method = MethodHTTP.POST, path = "post")

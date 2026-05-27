@@ -1,5 +1,9 @@
 package br.com.middleware.core;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import br.com.middleware.interceptor.InterceptorChain;
 import br.com.middleware.interceptor.InvocationInterceptor;
 import br.com.middleware.network.ProtocolPlugin;
@@ -12,6 +16,7 @@ public class Broker {
     private final InterceptorChain interceptorChain;
     private final ServerRequestHandler serverRequestHandler;
     private ProtocolPlugin protocol;
+    private final Map<String, AbsoluteObjectReference> aorRegistry = new LinkedHashMap<>();
 
     public Broker() {
         this.lookup = new Lookup();
@@ -42,15 +47,35 @@ public class Broker {
             throw new IllegalStateException(
                 "Nenhum protocolo configurado. Chame useProtocol() antes de build().");
 
+        String host = resolveHost();
         lookup.getAll().forEach((name, provider) -> {
-            String objectName = name;
-            String aor = protocol.getProtocolName() + "://localhost:"
-                + port + "/" + objectName;
-            System.out.println("[AOR] " + aor);
+            AbsoluteObjectReference aor = new AbsoluteObjectReference(
+                protocol.getProtocolName(), host, port, name);
+            aorRegistry.put(name, aor);
+            System.out.println(aor);
         });
 
         protocol.init(serverRequestHandler);
         return protocol;
+    }
+
+    public AbsoluteObjectReference getAor(String objectName) {
+        AbsoluteObjectReference aor = aorRegistry.get(objectName);
+        if (aor == null)
+            throw new RuntimeException("[Broker] AOR não encontrado para: " + objectName);
+        return aor;
+    }
+
+    public Map<String, AbsoluteObjectReference> getAllAors() {
+        return Collections.unmodifiableMap(aorRegistry);
+    }
+
+    private String resolveHost() {
+        try {
+            return java.net.InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "localhost";
+        }
     }
 
     public Lookup getLookup()   { return lookup; }
