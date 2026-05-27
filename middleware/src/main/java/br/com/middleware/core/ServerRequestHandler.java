@@ -30,10 +30,7 @@ public class ServerRequestHandler {
                 request.getParamsAsMap()
             );
 
-            if (!interceptorChain.runBefore(ctx)) {
-                String err = (String) ctx.getAttribute("authError");
-                return "{\"error\": \"" + (err != null ? err : "Requisição bloqueada") + "\"}";
-            }
+            interceptorChain.runBefore(ctx);
 
             InvocationReply reply = invoker.invoke(request);
 
