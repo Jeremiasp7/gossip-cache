@@ -15,16 +15,6 @@ public class WriterRequestHandler implements RequestHandler {
     private GossipWorker gossipWorker;
     private NodeInfo localNode;
     private MembershipList membershipList;
-
-    // -------------------------------------------------------------------------
-    // hopCount para gossip de dados.
-    //
-    // Problema original: hopCount=2 com fan-out=3 gerava até 3 + 9 = 12
-    // conexões TCP por operação de escrita.  Reduzido para 1: cada operação
-    // abre no máximo 3 conexões (os 3 peers diretos).  O Gateway já faz o
-    // rebroadcast explícito para todos os nós em GatewayRequestHandler, então
-    // não há perda de cobertura.
-    // -------------------------------------------------------------------------
     private static final int DATA_GOSSIP_HOP_COUNT = 1;
 
     public WriterRequestHandler(DictionaryStorage storage,
@@ -77,7 +67,6 @@ public class WriterRequestHandler implements RequestHandler {
                 localNode.getPort(), request.getKey(), DATA_GOSSIP_HOP_COUNT);
         System.out.flush();
 
-        // hopCount reduzido de 2 para 1: limita o fan-out a 3 conexões por escrita
         GossipMessage gossip = new GossipMessage(
                 localNode,
                 localNode.getSequenceNumber(),
@@ -94,7 +83,6 @@ public class WriterRequestHandler implements RequestHandler {
 
         AppRequest request = gossip.getData();
 
-        // Ignora heartbeats (chave null) — não há dado para persistir
         if (request == null || request.getKey() == null) return;
 
         System.out.printf("[Writer] Salvando chave '%s' recebida via gossip%n",
@@ -109,7 +97,6 @@ public class WriterRequestHandler implements RequestHandler {
                 dictionaryStorage.deleteLocalData(request.getKey());
                 break;
             default:
-                // GET via gossip não faz sentido — ignora silenciosamente
                 break;
         }
     }

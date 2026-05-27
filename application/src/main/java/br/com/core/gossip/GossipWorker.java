@@ -17,18 +17,6 @@ public class GossipWorker {
     private final NodeInfo localNode;
     private final ScheduledExecutorService scheduler;
 
-    // -------------------------------------------------------------------------
-    // Heartbeat separado do gossip de dados.
-    //
-    // Problema original: startBackgroundTest() criava um GossipMessage com
-    // AppRequest de chave null e hopCount=2, abrindo até (3 peers × 2 hops)
-    // conexões TCP por ciclo — apenas para sinalizar presença.  Sob carga do
-    // JMeter isso esgotava as portas efêmeras (~28k) em ~25 s.
-    //
-    // Solução: o heartbeat agora envia apenas o NodeInfo (objeto leve) via
-    // sendHeartbeat(). O gossip de *dados* (chave != null) continua funcionando
-    // normalmente, mas com hopCount=1 para limitar o fan-out.
-    // -------------------------------------------------------------------------
 
     public GossipWorker(MembershipList membershipList,
                         CommunicationStrategy communicationStrategy,
@@ -40,14 +28,7 @@ public class GossipWorker {
         this.scheduler             = scheduler;
     }
 
-    // -------------------------------------------------------------------------
-    // Gossip de dados — hopCount controlado pelo chamador
-    // -------------------------------------------------------------------------
 
-    /**
-     * Propaga um gossip de dados para um peer específico.
-     * Decrementa o hopCount antes de enviar; descarta se já for 0.
-     */
     public void spreadGossipToPeer(GossipMessage message, NodeInfo peer) {
         if (message.getHopCount() <= 0) return;
 
@@ -64,15 +45,8 @@ public class GossipWorker {
         communicationStrategy.sendGossip(copy, peer);
     }
 
-    /**
-     * Propaga um gossip de dados para até {@code fanOut} peers aleatórios.
-     *
-     * IMPORTANTE: só propaga se a mensagem tiver uma chave real (dados).
-     * Mensagens de heartbeat (chave == null) NÃO devem usar este método —
-     * use o mecanismo próprio de heartbeat em startBackgroundTask().
-     */
-    public void spreadGossip(GossipMessage message) {
-        // Guarda defensiva: nunca propaga heartbeat nulo via gossip TCP
+
+    public void spreadGossip(GossipMessage message) { // just propagate the gossip when the key is not null
         if (message.getData() == null || message.getData().getKey() == null) {
             System.out.println("[GossipWorker] Mensagem sem chave ignorada em spreadGossip()");
             return;
@@ -82,7 +56,6 @@ public class GossipWorker {
 
         message.setHopCount(message.getHopCount() - 1);
 
-        // Fan-out de 3 peers por hop — com hopCount=1 gera no máximo 3 conexões
         List<NodeInfo> peers = membershipList.getPeersToGossip(3);
 
         if (peers.isEmpty()) {
@@ -104,24 +77,8 @@ public class GossipWorker {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Background task: heartbeat leve + remoção de nós mortos
-    // -------------------------------------------------------------------------
+    public void startBackgroundTest() { // remove dead nodes and announces the live nodes
 
-    /**
-     * Inicia dois schedulers independentes:
-     *
-     * 1. removeDeadNodes a cada 15 s  — limpa a membership list.
-     * 2. Heartbeat a cada 5 s         — anuncia presença aos peers sem gossip
-     *    de dados; usa uma mensagem GossipMessage com AppRequest de chave null
-     *    e hopCount=1 (cada peer recebe 1 mensagem, não propaga).
-     *
-     * A separação evita que a falha de envio de heartbeat bloqueie a remoção
-     * de nós mortos, e vice-versa.
-     */
-    public void startBackgroundTest() {
-
-        // --- tarefa 1: limpeza de nós mortos ---
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 membershipList.removeDeadNodes();
@@ -131,7 +88,6 @@ public class GossipWorker {
             }
         }, 15, 15, TimeUnit.SECONDS);
 
-        // --- tarefa 2: heartbeat leve ---
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 localNode.setLastHeartbeat(System.currentTimeMillis());
@@ -143,17 +99,7 @@ public class GossipWorker {
         }, 5, 5, TimeUnit.SECONDS);
     }
 
-    /**
-     * Envia um heartbeat leve (AppRequest com chave null, hopCount=1) para
-     * até 3 peers aleatórios.  O receptor atualiza o lastHeartbeat do nó
-     * sem propagar a mensagem adiante (hopCount chegará a 0 no destinatário).
-     *
-     * Usa o mesmo canal TCP/UDP do gossip de dados para não abrir porta extra,
-     * mas com hopCount=1 garante que NÃO há fan-out secundário — cada ciclo
-     * abre no máximo 3 conexões.
-     */
     private void sendHeartbeat() {
-        // hopCount = 1: o destinatário recebe mas NÃO repropaga
         AppRequest heartbeatPayload = new AppRequest(Operation.GET, null, null);
         GossipMessage heartbeat = new GossipMessage(
                 localNode,
@@ -167,8 +113,6 @@ public class GossipWorker {
                 try {
                     communicationStrategy.sendGossip(heartbeat, peer);
                 } catch (Exception e) {
-                    // Falha de heartbeat é silenciosa — o nó será removido
-                    // naturalmente pelo removeDeadNodes() se ficar offline
                     System.err.println("[GossipWorker] Heartbeat falhou para porta "
                             + peer.getPort() + ": " + e.getMessage());
                 }

@@ -27,7 +27,7 @@ public class ApiGatewayServer {
             int gatewayPort = Integer.parseInt(args[0]);
             String protocol = args[1];
             String gatewayHost = InetAddress.getLocalHost().getHostAddress();
-            UUID gatewayUUID   = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
+            UUID gatewayUUID = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
 
             NodeInfo localNode = new NodeInfo(
                 gatewayUUID,
@@ -35,10 +35,9 @@ public class ApiGatewayServer {
                 gatewayPort, 0, NodeType.GATEWAY);
 
             MembershipList membershipList = new MembershipList(localNode);
-            ServiceRegistry registry      = new ServiceRegistry(membershipList);
-            RequestRouter requestRouter   = new RequestRouter(registry);
-            GatewayRequestHandler gatewayRequestHandler =
-                new GatewayRequestHandler(requestRouter);
+            ServiceRegistry registry = new ServiceRegistry(membershipList);
+            RequestRouter requestRouter = new RequestRouter(registry);
+            GatewayRequestHandler gatewayRequestHandler = new GatewayRequestHandler(requestRouter);
 
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
@@ -66,12 +65,9 @@ public class ApiGatewayServer {
             gatewayRequestHandler.setMembershipList(membershipList);
             gatewayRequestHandler.setGossipWorker(worker);
 
-            // GatewayService é o objeto remoto exposto pelo middleware
-            GatewayService gatewayService =
-                new GatewayService(requestRouter, membershipList);
+            GatewayService gatewayService = new GatewayService(requestRouter, membershipList);
 
-            ProtocolPlugin pluginImpl =
-                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+            ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
             ProtocolPlugin plugin = new Broker()
                 .register(gatewayService)
@@ -79,7 +75,6 @@ public class ApiGatewayServer {
                 .useProtocol(pluginImpl)
                 .build(gatewayPort);
 
-            // Injeta o plugin no strategy — única porta
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 

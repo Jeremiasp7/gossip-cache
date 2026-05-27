@@ -14,12 +14,10 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
     private ServerRequestHandler srh;
     private Marshaller marshaller;
 
-    // Tempo máximo de inatividade antes de fechar a conexão keep-alive (segundos).
-    // Anunciado ao cliente via header "Keep-Alive: timeout=N" para que ele feche
-    // antes do servidor — elimina a race condition de socket morto.
+    // allows the client to close the connection before the server
     private static final int KEEPALIVE_TIMEOUT_SECONDS = 30;
 
-    // Número máximo de requests por conexão keep-alive.
+    // max request number per keep alive connection
     private static final int MAX_KEEPALIVE_REQUESTS = 1000;
 
     @Override
@@ -77,10 +75,8 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
 
                 requestCount++;
 
-                // Fecha na última iteração permitida para dar ao cliente
-                // a chance de ver o "Connection: close" antes de reenviar.
-                boolean lastRequest = !keepAlive
-                        || requestCount >= MAX_KEEPALIVE_REQUESTS;
+                // closes the last permited iteration before give the request for the client
+                boolean lastRequest = !keepAlive || requestCount >= MAX_KEEPALIVE_REQUESTS;
 
                 String connectionHeader;
                 String keepAliveHeader = "";
@@ -88,11 +84,7 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
                 if (lastRequest) {
                     connectionHeader = "Connection: close\r\n";
                 } else {
-                    // Anuncia o timeout exato para o cliente fechar antes do servidor.
-                    // O JMeter respeita esse header e expira a conexão do seu lado
-                    // KEEPALIVE_TIMEOUT_SECONDS antes do servidor fechar —
-                    // eliminando a race condition que causava o SocketException de 1%.
-                    connectionHeader = "Connection: keep-alive\r\n";
+                    connectionHeader = "Connection: keep-alive\r\n"; // client closes the connection before the server
                     keepAliveHeader  = "Keep-Alive: timeout=" + KEEPALIVE_TIMEOUT_SECONDS
                                        + ", max=" + (MAX_KEEPALIVE_REQUESTS - requestCount)
                                        + "\r\n";
@@ -111,9 +103,7 @@ public class TcpPlugin extends AbstractTcpServer implements ProtocolPlugin {
             }
 
         } catch (SocketTimeoutException e) {
-            // Inatividade normal — cliente já fechou ou ficou silencioso
         } catch (EOFException | SocketException e) {
-            // Cliente fechou a conexão — esperado em keep-alive
         } catch (Exception e) {
             System.err.println("[TcpPlugin] Erro: " + e.getMessage());
         } finally {

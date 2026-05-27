@@ -18,22 +18,10 @@ public class MembershipList {
     private final CopyOnWriteArrayList<NodeInfo> writerNodes;
     private final CopyOnWriteArrayList<NodeInfo> gatewayNodes;
     private final ConcurrentHashMap<UUID, Long> removedNodes = new ConcurrentHashMap<>();
+    private static final long NODE_TIMEOUT_MS = 30_000;
+    private static final long TOMBSTONE_TTL   = 30_000;
 
-    // -------------------------------------------------------------------------
-    // TTL de inatividade aumentado de 30 s para 60 s.
-    //
-    // Problema original: sob carga pesada do JMeter o esgotamento de portas
-    // efêmeras (~25 s) interrompia o envio de gossip/heartbeat.  Com TTL=30 s,
-    // os nós eram removidos ~5 s depois — sem estarem realmente mortos.
-    // Com TTL=60 s há margem suficiente para o cluster se recuperar de um pico
-    // de carga sem perder entradas válidas na membership list.
-    // -------------------------------------------------------------------------
-    private static final long NODE_TIMEOUT_MS = 30_000;   // 60 s (era 30 s)
-    private static final long TOMBSTONE_TTL   = 30_000;   // 60 s
-
-    // Callback opcional: chamado quando um nó é removido por inatividade.
-    // Usado pelo TcpStrategy para descartar os sockets do pool desse nó.
-    private Consumer<UUID> onNodeEvicted;
+    private Consumer<UUID> onNodeEvicted; 
 
     public MembershipList(NodeInfo localNode) {
         this.localNode    = localNode;
@@ -46,30 +34,13 @@ public class MembershipList {
         addNodeToTypedList(localNode);
     }
 
-    // -------------------------------------------------------------------------
-    // Callback de evicção — registrado pelo TcpStrategy após criação
-    // -------------------------------------------------------------------------
 
-    /**
-     * Registra um callback invocado sempre que um nó é removido por inatividade.
-     * O TcpStrategy usa isso para fechar os sockets do pool desse nó.
-     *
-     * Exemplo de uso em WriterServer / ReaderServer / ApiGatewayServer:
-     * <pre>
-     *   if (tcpStrategy != null)
-     *       membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
-     * </pre>
-     */
     public void setOnNodeEvicted(Consumer<UUID> callback) {
         this.onNodeEvicted = callback;
     }
 
-    // -------------------------------------------------------------------------
-    // Atualização de nós
-    // -------------------------------------------------------------------------
 
     public void updateNode(NodeInfo incomingNode) {
-        // Nunca atualiza o próprio nó via gossip externo
         if (incomingNode.getSequenceNumber().equals(localNode.getSequenceNumber())) {
             return;
         }
@@ -77,9 +48,9 @@ public class MembershipList {
         Long removedAt = removedNodes.get(incomingNode.getSequenceNumber());
         if (removedAt != null) {
             if (System.currentTimeMillis() - removedAt < TOMBSTONE_TTL) {
-                return; // ainda dentro do TTL do tombstone — ignora
+                return;
             } else {
-                removedNodes.remove(incomingNode.getSequenceNumber()); // tombstone expirou
+                removedNodes.remove(incomingNode.getSequenceNumber());
             }
         }
 
@@ -88,17 +59,7 @@ public class MembershipList {
         addNodeToTypedList(incomingNode);
     }
 
-    // -------------------------------------------------------------------------
-    // Remoção de nós mortos
-    // -------------------------------------------------------------------------
 
-    /**
-     * Remove nós que não enviaram heartbeat nos últimos {@value #NODE_TIMEOUT_MS} ms.
-     *
-     * TTL aumentado de 30 s para 60 s para tolerar picos transitórios de carga
-     * sem remover nós que estão vivos.  Ao remover, dispara o callback
-     * {@code onNodeEvicted} para que o TcpStrategy feche os sockets do pool.
-     */
     public void removeDeadNodes() {
         long now = System.currentTimeMillis();
 
@@ -112,7 +73,6 @@ public class MembershipList {
                 System.out.printf("Nó porta %d removido por inatividade (sem heartbeat há %d s).%n",
                         node.getPort(), (now - node.getLastHeartbeat()) / 1000);
 
-                // Notifica o TcpStrategy para fechar os sockets desse peer
                 if (onNodeEvicted != null) {
                     try {
                         onNodeEvicted.accept(id);
@@ -124,7 +84,6 @@ public class MembershipList {
             }
         });
 
-        // Limpa tombstones expirados
         removedNodes.forEach((uuid, removedAt) -> {
             if (now - removedAt >= TOMBSTONE_TTL) {
                 removedNodes.remove(uuid);
@@ -132,12 +91,9 @@ public class MembershipList {
         });
     }
 
-    // -------------------------------------------------------------------------
-    // Listas por tipo
-    // -------------------------------------------------------------------------
 
     private void addNodeToTypedList(NodeInfo node) {
-        removeNodeFromTypedList(node); // evita duplicatas
+        removeNodeFromTypedList(node);
         switch (node.getType()) {
             case READER:  readerNodes.add(node);  break;
             case WRITER:  writerNodes.add(node);  break;
@@ -151,15 +107,8 @@ public class MembershipList {
         gatewayNodes.removeIf(n -> n.getSequenceNumber().equals(node.getSequenceNumber()));
     }
 
-    // -------------------------------------------------------------------------
-    // Consultas
-    // -------------------------------------------------------------------------
 
-    /**
-     * Retorna uma lista aleatória de até {@code numberOfPeers} nós ativos,
-     * excluindo o nó local.
-     */
-    public List<NodeInfo> getPeersToGossip(int numberOfPeers) {
+    public List<NodeInfo> getPeersToGossip(int numberOfPeers) { // return a list of active nodes
         List<NodeInfo> list = new ArrayList<>(activeNodes.values());
         list.removeIf(n -> n.getSequenceNumber().equals(localNode.getSequenceNumber()));
         Collections.shuffle(list);

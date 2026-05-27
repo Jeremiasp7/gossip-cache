@@ -25,8 +25,8 @@ public class ReaderServer {
 
     public static void main(String[] args) {
         try {
-            int port            = Integer.parseInt(args[0]);
-            String protocol     = args[1];
+            int port = Integer.parseInt(args[0]);
+            String protocol = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
 
             NodeInfo localNode = new NodeInfo(
@@ -45,10 +45,8 @@ public class ReaderServer {
                 System.out.println("Gateway descoberto na porta " + gatewayPort);
             }
 
-            // Instância compartilhada entre gossip e middleware
-            DictionaryStorage dictionary   = new DictionaryStorage();
-            ReadRequestHandler readHandler =
-                new ReadRequestHandler(dictionary, membershipList);
+            DictionaryStorage dictionary = new DictionaryStorage();
+            ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList);
 
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
@@ -73,8 +71,7 @@ public class ReaderServer {
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            ProtocolPlugin pluginImpl =
-                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+            ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
             ProtocolPlugin plugin = new Broker()
                 .register(dictionary)

@@ -25,8 +25,8 @@ public class WriterServer {
 
     public static void main(String[] args) {
         try {
-            int port            = Integer.parseInt(args[0]);
-            String protocol     = args[1];
+            int port = Integer.parseInt(args[0]);
+            String protocol = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
 
             NodeInfo localNode = new NodeInfo(
@@ -45,12 +45,9 @@ public class WriterServer {
                 System.out.println("Gateway descoberto na porta " + gatewayPort);
             }
 
-            // Instância compartilhada entre gossip e middleware
-            DictionaryStorage dictionary    = new DictionaryStorage();
-            WriterRequestHandler writeHandler =
-                new WriterRequestHandler(dictionary, membershipList);
+            DictionaryStorage dictionary = new DictionaryStorage();
+            WriterRequestHandler writeHandler = new WriterRequestHandler(dictionary, membershipList);
 
-            // Criar o strategy concreto para poder injetar o plugin depois
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
             CommunicationStrategy strategy;
@@ -74,24 +71,20 @@ public class WriterServer {
             writeHandler.setGossipWorker(worker);
             writeHandler.setLocalNode(localNode);
 
-            // Broker inicializa o plugin e devolve ele pronto
-            ProtocolPlugin pluginImpl =
-                protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
+            ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
 
             ProtocolPlugin plugin = new Broker()
                 .register(dictionary)
                 .addInterceptor(new LoggingInterceptor())
                 .useProtocol(pluginImpl)
-                .build(port); // ← inicializa, loga AOR, devolve plugin
+                .build(port);
 
-            // Injeta o plugin no strategy — sem abrir nova porta
             if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
             if (udpStrategy != null) udpStrategy.setPlugin(plugin);
 
             if (tcpStrategy != null)
                 membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
 
-            // Strategy é o único listener na porta
             final CommunicationStrategy finalStrategy = strategy;
             new Thread(() -> finalStrategy.startListening(port)).start();
             worker.startBackgroundTest();
