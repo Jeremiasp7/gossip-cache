@@ -66,7 +66,7 @@ public class ApiGatewayServer {
 
             GatewayService gatewayService = new GatewayService(requestRouter);
 
-            Broker broker = new Broker()
+            Broker broker = Broker.createDefault()
                 .register(gatewayService, () -> new GatewayService(requestRouter))
                 .addInterceptor(new LoggingInterceptor());
 

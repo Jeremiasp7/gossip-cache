@@ -20,13 +20,27 @@ public class Broker {
     private ProtocolPlugin protocol;
     private final Map<String, AbsoluteObjectReference> aorRegistry = new LinkedHashMap<>();
 
-    public Broker() {
-        this.lookup = new Lookup();
-        this.marshaller = new Marshaller(lookup);
-        this.invoker = new Invoker(lookup);
-        this.interceptorChain = new InterceptorChain();
-        this.serverRequestHandler = new ServerRequestHandler(
+    public Broker(Lookup lookup, Marshaller marshaller, Invoker invoker,
+                  InterceptorChain interceptorChain, ServerRequestHandler serverRequestHandler) {
+        this.lookup = lookup;
+        this.marshaller = marshaller;
+        this.invoker = invoker;
+        this.interceptorChain = interceptorChain;
+        this.serverRequestHandler = serverRequestHandler;
+    }
+
+    /**
+     * Factory method que cria um Broker com configuração padrão.
+     * Útil para bootstrap sem necessidade de DI container.
+     */
+    public static Broker createDefault() {
+        Lookup lookup = new Lookup();
+        Marshaller marshaller = new Marshaller(lookup);
+        Invoker invoker = new Invoker(lookup);
+        InterceptorChain interceptorChain = new InterceptorChain();
+        ServerRequestHandler serverRequestHandler = new ServerRequestHandler(
             invoker, marshaller, interceptorChain);
+        return new Broker(lookup, marshaller, invoker, interceptorChain, serverRequestHandler);
     }
 
     public Broker register(Object remoteObject) {
@@ -49,28 +63,18 @@ public class Broker {
         return this;
     }
 
-    public ProtocolPlugin build(int port) {
-        if (protocol == null)
-            throw new IllegalStateException(
-                "Nenhum protocolo configurado. Chame useProtocol() antes de build().");
-
-        String host = resolveHost();
-        lookup.getAll().forEach((name, provider) -> {
-            AbsoluteObjectReference aor = new AbsoluteObjectReference(
-                protocol.getProtocolName(), host, port, name);
-            aorRegistry.put(name, aor);
-            System.out.println(aor);
-        });
-
-        protocol.init(serverRequestHandler);
-        return protocol;
-    }
-
     public void startMiddlewareServer(int port) {
         if (protocol == null)
             throw new IllegalStateException(
                 "Nenhum protocolo configurado. Chame useProtocol() antes de startMiddlewareServer().");
 
+        registerAors(port);
+        protocol.init(serverRequestHandler);
+        MiddlewareServer server = new MiddlewareServer(port, protocol);
+        server.start();
+    }
+
+    private void registerAors(int port) {
         String host = resolveHost();
         lookup.getAll().forEach((name, provider) -> {
             AbsoluteObjectReference aor = new AbsoluteObjectReference(
@@ -78,10 +82,6 @@ public class Broker {
             aorRegistry.put(name, aor);
             System.out.println(aor);
         });
-
-        protocol.init(serverRequestHandler);
-        MiddlewareServer server = new MiddlewareServer(port, protocol);
-        server.start();
     }
 
     public AbsoluteObjectReference getAor(String objectName) {
@@ -103,7 +103,6 @@ public class Broker {
         }
     }
 
-    public Lookup getLookup()   { return lookup; }
-    public Invoker getInvoker() { return invoker; }
+    Lookup getLookup() { return lookup; }
+    Invoker getInvoker() { return invoker; }
 }
-

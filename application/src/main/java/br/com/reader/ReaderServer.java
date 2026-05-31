@@ -71,7 +71,7 @@ public class ReaderServer {
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            Broker broker = new Broker()
+            Broker broker = Broker.createDefault()
                 .register(dictionary, () -> new DictionaryStorage())
                 .addInterceptor(new LoggingInterceptor());
 
