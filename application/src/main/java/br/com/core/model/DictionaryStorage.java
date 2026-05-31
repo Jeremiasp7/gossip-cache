@@ -14,8 +14,16 @@ import br.com.middleware.annotations.MethodHTTP;
 @Lifecycle(LifecycleMode.STATIC)
 @RemoteObject(name = "dictionary")
 public class DictionaryStorage {
-    
-    private ConcurrentHashMap<String, CacheEntry> mapInMemory = new ConcurrentHashMap<>(); // all the methods will read and write in this object
+
+    private ConcurrentHashMap<String, CacheEntry> mapInMemory = new ConcurrentHashMap<>();
+    private static long instanceCount = 0;
+    private final long instanceId;
+
+    public DictionaryStorage() {
+        this.instanceId = ++instanceCount;
+        System.out.println("[DictionaryStorage] ✓ Instância #" + instanceId
+            + " criada (Lifecycle=" + DictionaryStorage.class.getAnnotation(Lifecycle.class).value() + ")");
+    }
 
     @MethodMapping(method = MethodHTTP.POST, path = "post")
     public void saveLocalData(@Param(name = "key") String key, @Param(name = "value") byte[] value) { // packages and writes the data

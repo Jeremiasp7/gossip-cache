@@ -67,7 +67,7 @@ public class ApiGatewayServer {
             GatewayService gatewayService = new GatewayService(requestRouter);
 
             Broker broker = new Broker()
-                .register(gatewayService)
+                .register(gatewayService, () -> new GatewayService(requestRouter))
                 .addInterceptor(new LoggingInterceptor());
 
             if (protocol.equalsIgnoreCase("UDP")) {

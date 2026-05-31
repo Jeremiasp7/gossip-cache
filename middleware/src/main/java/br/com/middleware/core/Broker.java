@@ -6,6 +6,7 @@ import java.util.Map;
 
 import br.com.middleware.interceptor.InterceptorChain;
 import br.com.middleware.interceptor.InvocationInterceptor;
+import br.com.middleware.lifecycle.InstanceFactory;
 import br.com.middleware.network.MiddlewareServer;
 import br.com.middleware.network.ProtocolPlugin;
 
@@ -30,6 +31,11 @@ public class Broker {
 
     public Broker register(Object remoteObject) {
         lookup.register(remoteObject);
+        return this;
+    }
+
+    public Broker register(Object remoteObject, InstanceFactory factory) {
+        lookup.register(remoteObject, factory);
         return this;
     }
 
@@ -100,3 +106,4 @@ public class Broker {
     public Lookup getLookup()   { return lookup; }
     public Invoker getInvoker() { return invoker; }
 }
+

@@ -5,27 +5,38 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class PoolingInstanceProvider implements InstanceProvider {
-    
+
     private final BlockingQueue<Object> pool;
     private final Class<?> clazz;
     private final int size;
 
     public PoolingInstanceProvider(Class<?> clazz, int size) {
+        this(clazz, size, () -> {
+            try {
+                return clazz.getDeclaredConstructor().newInstance();
+            } catch (Exception e) {
+                throw new RuntimeException(
+                    "[Pool] Falha ao criar instância de " + clazz.getSimpleName(), e);
+            }
+        });
+    }
+
+    public PoolingInstanceProvider(Class<?> clazz, int size, InstanceFactory factory) {
         this.clazz = clazz;
         this.size = size;
         this.pool = new LinkedBlockingQueue<>(size);
         try {
             for (int i = 0; i < size; i++) {
-                pool.put(clazz.getDeclaredConstructor().newInstance());
-                System.out.println("[Pool] " +size +" instâncias de "
-                    +clazz.getSimpleName() + " criadas");
-            } 
+                pool.put(factory.create());
+            }
+            System.out.println("[Pool] " + size + " instâncias de "
+                + clazz.getSimpleName() + " criadas");
         } catch (Exception e) {
             throw new RuntimeException(
                 "[Pool] Falha ao inicializar pool de " + clazz.getSimpleName(), e);
         }
     }
-    
+
     @Override
     public Object getInstance() {
         try {
@@ -35,8 +46,8 @@ public class PoolingInstanceProvider implements InstanceProvider {
                     "[Pool] Timeout aguardando instância de " + clazz.getSimpleName()
                     + " — pool de " + size + " instâncias esgotado");
             }
-            return instance;    
-        } catch (Exception e) {
+            return instance;
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("[Pool] Interrompido aguardando instância", e);
         }
@@ -47,15 +58,15 @@ public class PoolingInstanceProvider implements InstanceProvider {
         pool.offer(instance);
     }
 
-    public Class<?> getClazz() { 
-        return clazz; 
-    
-    }
-    public int getSize() { 
-        return size; 
+    public Class<?> getClazz() {
+        return clazz;
     }
 
-    public int getAvailable() { 
-        return pool.size(); 
+    public int getSize() {
+        return size;
+    }
+
+    public int getAvailable() {
+        return pool.size();
     }
 }

@@ -18,9 +18,14 @@ public class GatewayService {
 
     private final RequestRouter requestRouter;
     private Broker broker;
+    private static long instanceCount = 0;
+    private final long instanceId;
 
     public GatewayService(RequestRouter requestRouter) {
         this.requestRouter  = requestRouter;
+        this.instanceId = ++instanceCount;
+        System.out.println("[GatewayService] ✓ Instância #" + instanceId
+            + " criada (Lifecycle=" + GatewayService.class.getAnnotation(Lifecycle.class).value() + ")");
     }
 
     public void setBroker(Broker broker) {

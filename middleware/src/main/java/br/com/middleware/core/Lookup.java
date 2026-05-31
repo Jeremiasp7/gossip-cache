@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import br.com.middleware.annotations.RemoteObject;
+import br.com.middleware.lifecycle.InstanceFactory;
 import br.com.middleware.lifecycle.InstanceProvider;
 import br.com.middleware.lifecycle.LazyInstanceProvider;
 import br.com.middleware.lifecycle.Lifecycle;
@@ -13,7 +14,7 @@ import br.com.middleware.lifecycle.PoolingInstanceProvider;
 import br.com.middleware.lifecycle.StaticInstanceProvider;
 
 public class Lookup {
-    
+
     private final Map<String, InstanceProvider> registry = new ConcurrentHashMap<>();
 
     public void register(Object object) {
@@ -22,7 +23,7 @@ public class Lookup {
 
         if (annotation == null) {
             throw new IllegalArgumentException(
-                "Classe " +clazz.getSimpleName() +" não possui @RemoteObject"
+                "Classe " + clazz.getSimpleName() + " não possui @RemoteObject"
             );
         }
 
@@ -33,18 +34,52 @@ public class Lookup {
 
         if (lifecycle == null || lifecycle.value() == LifecycleMode.STATIC) {
             provider = new StaticInstanceProvider(object);
-            System.out.println("[Lookup] " +name +" -> STATIC");
+            System.out.println("[Lookup] " + name + " -> STATIC");
         } else if (lifecycle.value() == LifecycleMode.PER_REQUEST) {
             provider = new PerRequestInstanceProvider(clazz);
-            System.out.println("[Lookup] " +name +" -> PER_REQUEST");
+            System.out.println("[Lookup] " + name + " -> PER_REQUEST");
         } else if (lifecycle.value() == LifecycleMode.LAZY) {
             provider = new LazyInstanceProvider(clazz);
-            System.out.println("[Lookup] " +name +" -> LAZY");
+            System.out.println("[Lookup] " + name + " -> LAZY");
         } else if (lifecycle.value() == LifecycleMode.POOLING) {
             provider = new PoolingInstanceProvider(clazz, lifecycle.poolSize());
-            System.out.println("[Lookup] " +name +" -> LAZY");
+            System.out.println("[Lookup] " + name + " -> POOLING");
         } else {
-            provider = new StaticInstanceProvider(object); // fallback
+            provider = new StaticInstanceProvider(object);
+        }
+
+        registry.put(name, provider);
+    }
+
+    public void register(Object object, InstanceFactory factory) {
+        Class<?> clazz = object.getClass();
+        RemoteObject annotation = clazz.getAnnotation(RemoteObject.class);
+
+        if (annotation == null) {
+            throw new IllegalArgumentException(
+                "Classe " + clazz.getSimpleName() + " não possui @RemoteObject"
+            );
+        }
+
+        String name = annotation.name().isEmpty() ? clazz.getSimpleName().toLowerCase() : annotation.name();
+
+        Lifecycle lifecycle = clazz.getAnnotation(Lifecycle.class);
+        InstanceProvider provider;
+
+        if (lifecycle == null || lifecycle.value() == LifecycleMode.STATIC) {
+            provider = new StaticInstanceProvider(object);
+            System.out.println("[Lookup] " + name + " -> STATIC");
+        } else if (lifecycle.value() == LifecycleMode.PER_REQUEST) {
+            provider = new PerRequestInstanceProvider(clazz, factory);
+            System.out.println("[Lookup] " + name + " -> PER_REQUEST");
+        } else if (lifecycle.value() == LifecycleMode.LAZY) {
+            provider = new LazyInstanceProvider(clazz, factory);
+            System.out.println("[Lookup] " + name + " -> LAZY");
+        } else if (lifecycle.value() == LifecycleMode.POOLING) {
+            provider = new PoolingInstanceProvider(clazz, lifecycle.poolSize(), factory);
+            System.out.println("[Lookup] " + name + " -> POOLING");
+        } else {
+            provider = new StaticInstanceProvider(object);
         }
 
         registry.put(name, provider);

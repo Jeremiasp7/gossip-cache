@@ -72,7 +72,7 @@ public class ReaderServer {
             readHandler.setLocalNode(localNode);
 
             Broker broker = new Broker()
-                .register(dictionary)
+                .register(dictionary, () -> new DictionaryStorage())
                 .addInterceptor(new LoggingInterceptor());
 
             if (protocol.equalsIgnoreCase("UDP")) {
