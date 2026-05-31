@@ -6,6 +6,7 @@ import java.util.Map;
 
 import br.com.middleware.interceptor.InterceptorChain;
 import br.com.middleware.interceptor.InvocationInterceptor;
+import br.com.middleware.network.MiddlewareServer;
 import br.com.middleware.network.ProtocolPlugin;
 
 public class Broker {
@@ -57,6 +58,24 @@ public class Broker {
 
         protocol.init(serverRequestHandler);
         return protocol;
+    }
+
+    public void startMiddlewareServer(int port) {
+        if (protocol == null)
+            throw new IllegalStateException(
+                "Nenhum protocolo configurado. Chame useProtocol() antes de startMiddlewareServer().");
+
+        String host = resolveHost();
+        lookup.getAll().forEach((name, provider) -> {
+            AbsoluteObjectReference aor = new AbsoluteObjectReference(
+                protocol.getProtocolName(), host, port, name);
+            aorRegistry.put(name, aor);
+            System.out.println(aor);
+        });
+
+        protocol.init(serverRequestHandler);
+        MiddlewareServer server = new MiddlewareServer(port, protocol);
+        server.start();
     }
 
     public AbsoluteObjectReference getAor(String objectName) {

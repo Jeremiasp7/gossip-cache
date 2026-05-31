@@ -8,9 +8,6 @@ import java.io.OutputStream;
 import java.io.PushbackInputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -22,15 +19,12 @@ import br.com.core.model.AppRequest;
 import br.com.core.model.AppResponse;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
-import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
 import br.com.middleware.network.AbstractTcpServer;
-import br.com.middleware.network.ProtocolPlugin;
 
 public class TcpStrategy extends AbstractTcpServer implements CommunicationStrategy {
 
     private final RequestHandler handler;
-    private ProtocolPlugin plugin;
 
     private final ExecutorService gossipExecutor = Executors.newFixedThreadPool(16);
 
@@ -61,13 +55,8 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
     }
 
     public TcpStrategy(RequestHandler handler) {
-        this.handler    = handler;
+        this.handler = handler;
     }
-
-    public void setPlugin(ProtocolPlugin plugin) {
-        this.plugin = plugin;
-    }
-
 
     @Override
     public void startListening(int port) {
@@ -90,7 +79,8 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
             if (magicByte == (byte) -84) {
                 gossipExecutor.submit(() -> handleSerialized(wrapped));
             } else {
-                executor.submit(() -> handleHttp(wrapped));
+                System.err.println("[TcpStrategy] Tráfego não-serializado recebido na porta de cluster. Ignorando.");
+                try { connection.close(); } catch (IOException ignored) {}
             }
         } catch (IOException e) {
             try { connection.close(); } catch (IOException ignored) {}
@@ -110,37 +100,9 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
 
             if (received instanceof AppRequest) {
                 AppRequest appRequest = (AppRequest) received;
-
-                if (plugin != null) {
-                    String httpMethod = operationToHttpMethod(appRequest.getOperation());
-                    String methodPath = operationToPath(appRequest.getOperation());
-
-                    Map<String, String> params = new LinkedHashMap<>();
-                    if (appRequest.getKey() != null)
-                        params.put("key", appRequest.getKey());
-                    if (appRequest.getValue() != null)
-                        params.put("value", new String(
-                                appRequest.getValue(),
-                                StandardCharsets.UTF_8));
-                    
-                    String resultBody = plugin.getServerRequestHandler()
-                        .handle(httpMethod, "dictionary", methodPath, params);
-
-                    AppResponse response;
-                    if (resultBody.contains("\"error\"")) {
-                        response = new AppResponse("500", null, resultBody);
-                    } else {
-                        byte[] resultBytes =
-                                resultBody != null && !resultBody.equals("null")
-                                        ? resultBody.getBytes(
-                                                java.nio.charset.StandardCharsets.UTF_8)
-                                        : null;
-                        response = new AppResponse("200", resultBytes, "OK");
-                    }
-                    output.writeObject(response);
-                    output.flush();
-                }
-
+                AppResponse response = handler.handleRequest(appRequest);
+                output.writeObject(response);
+                output.flush();
             } else if (received instanceof GossipMessage) {
                 handler.handleGossip((GossipMessage) received);
             }
@@ -151,11 +113,6 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
             try { connection.close(); } catch (IOException ignored) {}
         }
     }
-
-    private void handleHttp(Socket connection) {
-        plugin.handleHttpConnection(connection);
-    }
-
 
     @Override
     public AppResponse sendRequest(AppRequest request, NodeInfo destinationNode) {
@@ -220,7 +177,6 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
         return new AppResponse("500", null, "Erro Interno de Comunicação no Cluster");
     }
 
-
     @Override
     public void sendGossip(GossipMessage message, NodeInfo destinationNode) {
         try (Socket socket = openSocket(destinationNode)) {
@@ -232,27 +188,6 @@ public class TcpStrategy extends AbstractTcpServer implements CommunicationStrat
         } catch (Exception e) {
             System.err.println("[TcpStrategy] Erro gossip para porta "
                     + destinationNode.getPort() + ": " + e.getMessage());
-        }
-    }
-
-
-    private String operationToPath(Operation operation) {
-        switch (operation) {
-            case GET:    return "get";
-            case POST:
-            case PUT:    return "post";
-            case DELETE: return "delete";
-            default: throw new RuntimeException("Operação não mapeada: " + operation);
-        }
-    }
-
-    private String operationToHttpMethod(Operation operation) {
-        switch (operation) {
-            case GET:    return "GET";
-            case POST:
-            case PUT:    return "POST";
-            case DELETE: return "POST";
-            default: throw new RuntimeException("Operação não mapeada: " + operation);
         }
     }
 }

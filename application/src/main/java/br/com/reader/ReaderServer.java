@@ -16,7 +16,6 @@ import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
 import br.com.middleware.core.Broker;
 import br.com.middleware.interceptor.LoggingInterceptor;
-import br.com.middleware.network.ProtocolPlugin;
 import br.com.middleware.network.TcpPlugin;
 import br.com.middleware.network.UdpPlugin;
 
@@ -24,24 +23,26 @@ public class ReaderServer {
 
     public static void main(String[] args) {
         try {
-            int port = Integer.parseInt(args[0]);
+            int middlewarePort = Integer.parseInt(args[0]);
             String protocol = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
+            int clusterPort = middlewarePort + 1000;
 
             NodeInfo localNode = new NodeInfo(
                 UUID.randomUUID(),
                 InetAddress.getLocalHost().getHostAddress(),
-                port, 0, NodeType.READER);
+                clusterPort, 0, NodeType.READER);
 
             MembershipList membershipList = new MembershipList(localNode);
 
             if (gatewayPort != null) {
                 String gatewayHost = InetAddress.getLocalHost().getHostAddress();
                 UUID gatewayUUID   = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
+                int gatewayClusterPort = gatewayPort + 1000;
                 NodeInfo gatewayNode = new NodeInfo(
-                    gatewayUUID, gatewayHost, gatewayPort, 0, NodeType.GATEWAY);
+                    gatewayUUID, gatewayHost, gatewayClusterPort, 0, NodeType.GATEWAY);
                 membershipList.updateNode(gatewayNode);
-                System.out.println("Gateway descoberto na porta " + gatewayPort);
+                System.out.println("Gateway descoberto na porta de cluster " + gatewayClusterPort);
             }
 
             DictionaryStorage dictionary = new DictionaryStorage();
@@ -70,26 +71,27 @@ public class ReaderServer {
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
-
-            ProtocolPlugin plugin = new Broker()
+            Broker broker = new Broker()
                 .register(dictionary)
-                .addInterceptor(new LoggingInterceptor())
-                .useProtocol(pluginImpl)
-                .build(port);
+                .addInterceptor(new LoggingInterceptor());
 
-            if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
-            if (udpStrategy != null) udpStrategy.setPlugin(plugin);
+            if (protocol.equalsIgnoreCase("UDP")) {
+                broker.useProtocol(new UdpPlugin());
+            } else {
+                broker.useProtocol(new TcpPlugin());
+            }
+
+            broker.startMiddlewareServer(middlewarePort);
 
             if (tcpStrategy != null)
                 membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
 
             final CommunicationStrategy finalStrategy = strategy;
-            new Thread(() -> finalStrategy.startListening(port)).start();
+            new Thread(() -> finalStrategy.startListening(clusterPort)).start();
             worker.startBackgroundTest();
 
-            System.out.println("Reader no ar na porta " + port
-                + " via " + protocol.toUpperCase());
+            System.out.println("Reader no ar na porta de middleware " + middlewarePort
+                + " e porta de cluster " + clusterPort + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             e.printStackTrace();

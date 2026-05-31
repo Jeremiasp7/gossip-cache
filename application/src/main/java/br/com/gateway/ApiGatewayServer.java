@@ -15,7 +15,6 @@ import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
 import br.com.middleware.core.Broker;
 import br.com.middleware.interceptor.LoggingInterceptor;
-import br.com.middleware.network.ProtocolPlugin;
 import br.com.middleware.network.TcpPlugin;
 import br.com.middleware.network.UdpPlugin;
 
@@ -23,15 +22,16 @@ public class ApiGatewayServer {
 
     public static void main(String[] args) {
         try {
-            int gatewayPort = Integer.parseInt(args[0]);
+            int middlewarePort = Integer.parseInt(args[0]);
             String protocol = args[1];
             String gatewayHost = InetAddress.getLocalHost().getHostAddress();
-            UUID gatewayUUID = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
+            UUID gatewayUUID = NodeInfo.deterministicUUID(gatewayHost, middlewarePort);
+            int clusterPort = middlewarePort + 1000;
 
             NodeInfo localNode = new NodeInfo(
                 gatewayUUID,
                 gatewayHost,
-                gatewayPort, 0, NodeType.GATEWAY);
+                clusterPort, 0, NodeType.GATEWAY);
 
             MembershipList membershipList = new MembershipList(localNode);
             ServiceRegistry registry = new ServiceRegistry(membershipList);
@@ -66,29 +66,27 @@ public class ApiGatewayServer {
 
             GatewayService gatewayService = new GatewayService(requestRouter);
 
-            ProtocolPlugin pluginImpl = protocol.equalsIgnoreCase("UDP") ? new UdpPlugin() : new TcpPlugin();
-
-            ProtocolPlugin plugin = new Broker()
+            Broker broker = new Broker()
                 .register(gatewayService)
-                .addInterceptor(new LoggingInterceptor())
-                .useProtocol(pluginImpl)
-                .build(gatewayPort);
+                .addInterceptor(new LoggingInterceptor());
 
-            Broker broker = new Broker();
-            gatewayService.setBroker(broker);
+            if (protocol.equalsIgnoreCase("UDP")) {
+                broker.useProtocol(new UdpPlugin());
+            } else {
+                broker.useProtocol(new TcpPlugin());
+            }
 
-            if (tcpStrategy != null) tcpStrategy.setPlugin(plugin);
-            if (udpStrategy != null) udpStrategy.setPlugin(plugin);
+            broker.startMiddlewareServer(middlewarePort);
 
             if (tcpStrategy != null)
                 membershipList.setOnNodeEvicted(tcpStrategy::evictPool);
 
             final CommunicationStrategy finalStrategy = internalStrategy;
-            new Thread(() -> finalStrategy.startListening(gatewayPort)).start();
+            new Thread(() -> finalStrategy.startListening(clusterPort)).start();
             worker.startBackgroundTest();
 
-            System.out.println("API Gateway no ar na porta " + gatewayPort
-                + " via " + protocol.toUpperCase());
+            System.out.println("API Gateway no ar na porta de middleware " + middlewarePort
+                + " e porta de cluster " + clusterPort + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             System.err.println("Erro ao iniciar o API Gateway: " + e.getMessage());

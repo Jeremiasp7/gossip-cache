@@ -5,13 +5,13 @@ import java.nio.charset.StandardCharsets;
 
 import br.com.middleware.core.ServerRequestHandler;
 
-public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
+public class UdpPlugin implements ProtocolPlugin {
 
     private ServerRequestHandler srh;
 
     @Override
     public void init(ServerRequestHandler srh) {
-        this.srh        = srh;
+        this.srh = srh;
         System.out.println("[UdpPlugin] Inicializado");
     }
 
@@ -29,19 +29,18 @@ public class UdpPlugin extends AbstractUdpServer implements ProtocolPlugin {
         }
     }
 
-    // TCP não usado no UdpPlugin
     @Override
     public void handleHttpConnection(Socket connection) {}
-
-    // Não usado — UdpStrategy é quem abre o DatagramSocket
-    @Override
-    protected void handlePacket(byte[] data, int offset, int length,
-                                InetAddress addr, int port,
-                                DatagramSocket socket) {}
 
     @Override
     public String getProtocolName() { return "UDP"; }
 
-    @Override
-    public ServerRequestHandler getServerRequestHandler() { return srh; }
+    protected void sendResponse(DatagramSocket socket, byte[] data,
+                                InetAddress addr, int port) {
+        try {
+            socket.send(new DatagramPacket(data, data.length, addr, port));
+        } catch (Exception e) {
+            System.err.println("[UdpPlugin] Erro ao enviar resposta: " + e.getMessage());
+        }
+    }
 }
