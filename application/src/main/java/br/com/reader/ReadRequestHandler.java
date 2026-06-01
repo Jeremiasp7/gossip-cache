@@ -9,22 +9,22 @@ import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
 import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
-import br.com.middleware.core.Broker;
+import br.com.middleware.core.ServerRequestHandler;
 
 public class ReadRequestHandler implements RequestHandler {
 
-    private DictionaryStorage dictionaryStorage;
-    private MembershipList membershipList;
+    private final DictionaryStorage dictionaryStorage;
+    private final MembershipList membershipList;
+    private final ServerRequestHandler serverRequestHandler;
     private GossipWorker gossipWorker;
     private NodeInfo localNode;
-    private Broker broker;
 
     public ReadRequestHandler(DictionaryStorage storage,
                               MembershipList membershipList,
-                              Broker broker) {
-        this.dictionaryStorage = storage;
-        this.membershipList = membershipList;
-        this.broker = broker;
+                              ServerRequestHandler serverRequestHandler) {
+        this.dictionaryStorage    = storage;
+        this.membershipList       = membershipList;
+        this.serverRequestHandler = serverRequestHandler;
     }
 
     public void setGossipWorker(GossipWorker gossipWorker) {
@@ -35,85 +35,66 @@ public class ReadRequestHandler implements RequestHandler {
         this.localNode = localNode;
     }
 
-
     @Override
     public AppResponse handleRequest(AppRequest request) {
         System.out.printf("Reader processando %s para chave '%s'%n",
-                request.getOperation(), request.getKey());
+            request.getOperation(), request.getKey());
 
-        try {
-            byte[] result = broker.invokeCacheOperation(
-                request.getOperation().toString(),
-                request.getKey(),
-                request.getValue());
+        if (request.getOperation() != Operation.GET)
+            return new AppResponse("405", null, "Method Not Allowed");
 
-            if (request.getOperation() == Operation.GET) {
-                if (result == null) {
-                    return new AppResponse("200", "".getBytes(),
-                            "Não encontrado (aguardando gossip)");
-                }
-                return new AppResponse("200", result, "OK");
-            }
+        java.util.Map<String, String> params = new java.util.LinkedHashMap<>();
+        if (request.getKey() != null)
+            params.put("key", request.getKey());
 
-            return new AppResponse("200", null, "OK");
-        } catch (Exception e) {
-            return new AppResponse("500", null, "Erro ao processar requisição: " + e.getMessage());
-        }
+        String result = serverRequestHandler.handle(
+            "GET", "dictionary", "get", params);
+
+        if (result.contains("\"error\""))
+            return new AppResponse("500", null, result);
+
+        if (result == null || result.equals("null"))
+            return new AppResponse("200", "".getBytes(),
+                "Não encontrado (aguardando gossip)");
+
+        return new AppResponse("200",
+            result.getBytes(java.nio.charset.StandardCharsets.UTF_8), "OK");
     }
-
 
     @Override
     public void handleGossip(GossipMessage gossip) {
         NodeInfo sender = gossip.getSourceNode();
 
         if (localNode != null) {
-            boolean sameUUID = sender.getSequenceNumber()
-                    .equals(localNode.getSequenceNumber());
-            boolean sameAddress = sender.getAddress().equals(localNode.getAddress())
-                    && sender.getPort() == localNode.getPort();
-
-            if (sameUUID || sameAddress) return;
+            if (sender.getSequenceNumber().equals(localNode.getSequenceNumber())
+                    || (sender.getAddress().equals(localNode.getAddress())
+                        && sender.getPort() == localNode.getPort())) return;
         }
 
         membershipList.updateNode(sender);
-
         AppRequest request = gossip.getData();
 
         if (request == null || request.getKey() == null) {
-            System.out.printf(
-                    "[Reader porta %d] Heartbeat recebido de %s porta %d%n",
-                    localNode != null ? localNode.getPort() : -1,
-                    sender.getType(), sender.getPort());
-            System.out.flush();
+            System.out.printf("[Reader porta %d] Heartbeat de %s porta %d%n",
+                localNode != null ? localNode.getPort() : -1,
+                sender.getType(), sender.getPort());
             return;
         }
 
-        System.out.printf(
-                "[Reader porta %d] Salvando chave '%s' (valor: '%s') do gossip%n",
-                localNode != null ? localNode.getPort() : -1,
-                request.getKey(),
-                request.getValue() != null ? new String(request.getValue()) : "null");
-        System.out.flush();
+        System.out.printf("[Reader porta %d] Salvando chave '%s' via gossip%n",
+            localNode != null ? localNode.getPort() : -1, request.getKey());
 
         switch (request.getOperation()) {
-            case POST:
-            case PUT:
+            case POST: case PUT:
                 dictionaryStorage.saveLocalData(request.getKey(), request.getValue());
                 break;
             case DELETE:
                 dictionaryStorage.deleteLocalData(request.getKey());
                 break;
-            default:
-                break;
+            default: break;
         }
 
-        if (gossipWorker != null && gossip.getHopCount() > 0) {
-            System.out.printf(
-                    "[Reader porta %d] Propagando gossip da chave '%s' (hopCount: %d)%n",
-                    localNode != null ? localNode.getPort() : -1,
-                    request.getKey(), gossip.getHopCount());
-            System.out.flush();
+        if (gossipWorker != null && gossip.getHopCount() > 0)
             gossipWorker.spreadGossip(gossip);
-        }
     }
 }

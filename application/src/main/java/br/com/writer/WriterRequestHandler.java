@@ -8,23 +8,23 @@ import br.com.core.model.DictionaryStorage;
 import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
 import br.com.core.model.RequestHandler;
-import br.com.middleware.core.Broker;
+import br.com.middleware.core.ServerRequestHandler;
 
 public class WriterRequestHandler implements RequestHandler {
 
-    private DictionaryStorage dictionaryStorage;
+    private final DictionaryStorage dictionaryStorage;
+    private final MembershipList membershipList;
+    private final ServerRequestHandler serverRequestHandler;
     private GossipWorker gossipWorker;
     private NodeInfo localNode;
-    private MembershipList membershipList;
-    private Broker broker;
     private static final int DATA_GOSSIP_HOP_COUNT = 1;
 
     public WriterRequestHandler(DictionaryStorage storage,
                                 MembershipList membershipList,
-                                Broker broker) {
-        this.dictionaryStorage = storage;
-        this.membershipList    = membershipList;
-        this.broker = broker;
+                                ServerRequestHandler serverRequestHandler) {
+        this.dictionaryStorage    = storage;
+        this.membershipList       = membershipList;
+        this.serverRequestHandler = serverRequestHandler;
     }
 
     public void setGossipWorker(GossipWorker gossipWorker) {
@@ -37,43 +37,28 @@ public class WriterRequestHandler implements RequestHandler {
 
     @Override
     public AppResponse handleRequest(AppRequest request) {
-        System.out.printf(
-                "[Writer porta %s] Processando %s para chave '%s'%n",
-                localNode != null ? localNode.getPort() : "?",
-                request.getOperation(),
-                request.getKey());
+        System.out.printf("[Writer porta %s] Processando %s para chave '%s'%n",
+            localNode != null ? localNode.getPort() : "?",
+            request.getOperation(), request.getKey());
 
-        try {
-            broker.invokeCacheOperation(
-                request.getOperation().toString(),
-                request.getKey(),
-                request.getValue());
+        String httpMethod = operationToHttpMethod(request.getOperation().name());
+        String methodPath = operationToPath(request.getOperation().name());
 
-            spreadToNetwork(request);
-            return new AppResponse("200", request.getValue(), "OK");
-        } catch (Exception e) {
-            return new AppResponse("500", null, "Erro ao processar requisição: " + e.getMessage());
-        }
-    }
+        java.util.Map<String, String> params = new java.util.LinkedHashMap<>();
+        if (request.getKey() != null)
+            params.put("key", request.getKey());
+        if (request.getValue() != null)
+            params.put("value", new String(
+                request.getValue(), java.nio.charset.StandardCharsets.UTF_8));
 
-    private void spreadToNetwork(AppRequest request) {
-        if (gossipWorker == null || localNode == null) {
-            System.out.println("[Writer] ERRO: gossipWorker ou localNode é nulo!");
-            return;
-        }
+        String result = serverRequestHandler.handle(
+            httpMethod, "dictionary", methodPath, params);
 
-        System.out.printf(
-                "[Writer porta %d] Propagando chave '%s' via gossip (hopCount=%d)%n",
-                localNode.getPort(), request.getKey(), DATA_GOSSIP_HOP_COUNT);
-        System.out.flush();
+        if (result.contains("\"error\""))
+            return new AppResponse("500", null, result);
 
-        GossipMessage gossip = new GossipMessage(
-                localNode,
-                localNode.getSequenceNumber(),
-                request,
-                DATA_GOSSIP_HOP_COUNT);
-
-        gossipWorker.spreadGossip(gossip);
+        spreadToNetwork(request);
+        return new AppResponse("200", request.getValue(), "OK");
     }
 
     @Override
@@ -82,11 +67,10 @@ public class WriterRequestHandler implements RequestHandler {
         membershipList.updateNode(sender);
 
         AppRequest request = gossip.getData();
-
         if (request == null || request.getKey() == null) return;
 
-        System.out.printf("[Writer] Salvando chave '%s' recebida via gossip%n",
-                request.getKey());
+        System.out.printf("[Writer] Salvando chave '%s' via gossip%n",
+            request.getKey());
 
         switch (request.getOperation()) {
             case POST:
@@ -99,5 +83,30 @@ public class WriterRequestHandler implements RequestHandler {
             default:
                 break;
         }
+    }
+
+    private void spreadToNetwork(AppRequest request) {
+        if (gossipWorker == null || localNode == null) {
+            System.out.println("[Writer] ERRO: gossipWorker ou localNode é nulo!");
+            return;
+        }
+        System.out.printf("[Writer porta %d] Propagando chave '%s' via gossip%n",
+            localNode.getPort(), request.getKey());
+        GossipMessage gossip = new GossipMessage(
+            localNode, localNode.getSequenceNumber(), request, DATA_GOSSIP_HOP_COUNT);
+        gossipWorker.spreadGossip(gossip);
+    }
+
+    private String operationToPath(String operation) {
+        switch (operation.toUpperCase()) {
+            case "GET":           return "get";
+            case "POST": case "PUT": return "post";
+            case "DELETE":        return "delete";
+            default: throw new RuntimeException("Operação não mapeada: " + operation);
+        }
+    }
+
+    private String operationToHttpMethod(String operation) {
+        return operation.equalsIgnoreCase("GET") ? "GET" : "POST";
     }
 }

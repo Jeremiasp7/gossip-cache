@@ -21,7 +21,7 @@ public class DictionaryStorage {
 
     public DictionaryStorage() {
         this.instanceId = ++instanceCount;
-        System.out.println("[DictionaryStorage] ✓ Instância #" + instanceId
+        System.out.println("[DictionaryStorage] Instância #" + instanceId
             + " criada (Lifecycle=" + DictionaryStorage.class.getAnnotation(Lifecycle.class).value() + ")");
     }
 
@@ -55,7 +55,8 @@ public class DictionaryStorage {
         }
     }
 
-    public void deleteLocalData(String key) { // delete the data and make a tombstone
+    @MethodMapping(method = MethodHTTP.DELETE, path = "delete")
+    public void deleteLocalData(@Param(name = "key") String key) { // delete the data and make a tombstone
         long actualTimestamp = System.currentTimeMillis();
         CacheEntry packet = new CacheEntry(actualTimestamp, null);
         this.mapInMemory.put(key, packet);

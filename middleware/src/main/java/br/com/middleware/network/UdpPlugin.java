@@ -7,11 +7,9 @@ import br.com.middleware.core.ServerRequestHandler;
 
 public class UdpPlugin implements ProtocolPlugin {
 
-    private ServerRequestHandler srh;
 
     @Override
     public void init(ServerRequestHandler srh) {
-        this.srh = srh;
         System.out.println("[UdpPlugin] Inicializado");
     }
 

@@ -15,6 +15,7 @@ import br.com.core.network.GrpcStrategy;
 import br.com.core.network.TcpStrategy;
 import br.com.core.network.UdpStrategy;
 import br.com.middleware.core.Broker;
+import br.com.middleware.core.ServerRequestHandler;
 import br.com.middleware.interceptor.LoggingInterceptor;
 import br.com.middleware.network.TcpPlugin;
 import br.com.middleware.network.UdpPlugin;
@@ -23,10 +24,10 @@ public class ReaderServer {
 
     public static void main(String[] args) {
         try {
-            int middlewarePort = Integer.parseInt(args[0]);
-            String protocol = args[1];
+            int middlewarePort  = Integer.parseInt(args[0]);
+            String protocol     = args[1];
             Integer gatewayPort = args.length > 2 ? Integer.parseInt(args[2]) : null;
-            int clusterPort = middlewarePort + 1000;
+            int clusterPort     = middlewarePort + 1000;
 
             NodeInfo localNode = new NodeInfo(
                 UUID.randomUUID(),
@@ -36,10 +37,10 @@ public class ReaderServer {
             MembershipList membershipList = new MembershipList(localNode);
 
             if (gatewayPort != null) {
-                String gatewayHost = InetAddress.getLocalHost().getHostAddress();
-                UUID gatewayUUID   = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
+                String gatewayHost     = InetAddress.getLocalHost().getHostAddress();
+                UUID gatewayUUID       = NodeInfo.deterministicUUID(gatewayHost, gatewayPort);
                 int gatewayClusterPort = gatewayPort + 1000;
-                NodeInfo gatewayNode = new NodeInfo(
+                NodeInfo gatewayNode   = new NodeInfo(
                     gatewayUUID, gatewayHost, gatewayClusterPort, 0, NodeType.GATEWAY);
                 membershipList.updateNode(gatewayNode);
                 System.out.println("Gateway descoberto na porta de cluster " + gatewayClusterPort);
@@ -47,9 +48,13 @@ public class ReaderServer {
 
             DictionaryStorage dictionary = new DictionaryStorage();
             Broker broker = Broker.createDefault()
-                .register(dictionary, () -> new DictionaryStorage())
+                .register(dictionary)
                 .addInterceptor(new LoggingInterceptor());
-            ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList, broker);
+
+            ServerRequestHandler srh = broker.getServerRequestHandler();
+
+            ReadRequestHandler readHandler =
+                new ReadRequestHandler(dictionary, membershipList, srh);
 
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
@@ -60,7 +65,7 @@ public class ReaderServer {
                 strategy    = udpStrategy;
             } else if (protocol.equalsIgnoreCase("TCP")) {
                 tcpStrategy = new TcpStrategy(readHandler);
-                strategy = tcpStrategy;
+                strategy    = tcpStrategy;
             } else if (protocol.equalsIgnoreCase("GRPC")) {
                 strategy = new GrpcStrategy(readHandler, new GrpcMapper());
             } else {
@@ -74,11 +79,8 @@ public class ReaderServer {
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
 
-            if (protocol.equalsIgnoreCase("UDP")) {
-                broker.useProtocol(new UdpPlugin());
-            } else {
-                broker.useProtocol(new TcpPlugin());
-            }
+            if (protocol.equalsIgnoreCase("UDP")) broker.useProtocol(new UdpPlugin());
+            else broker.useProtocol(new TcpPlugin());
 
             broker.startMiddlewareServer(middlewarePort);
 
@@ -89,8 +91,8 @@ public class ReaderServer {
             new Thread(() -> finalStrategy.startListening(clusterPort)).start();
             worker.startBackgroundTest();
 
-            System.out.println("Reader no ar na porta de middleware " + middlewarePort
-                + " e porta de cluster " + clusterPort + " via " + protocol.toUpperCase());
+            System.out.println("Reader: middleware=" + middlewarePort
+                + " cluster=" + clusterPort + " via " + protocol.toUpperCase());
 
         } catch (Exception e) {
             e.printStackTrace();
