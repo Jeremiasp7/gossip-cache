@@ -64,10 +64,11 @@ public class ApiGatewayServer {
             gatewayRequestHandler.setMembershipList(membershipList);
             gatewayRequestHandler.setGossipWorker(worker);
 
-            GatewayService gatewayService = new GatewayService(requestRouter);
+            Broker broker = Broker.createDefault();
 
-            Broker broker = Broker.createDefault()
-                .register(gatewayService, () -> new GatewayService(requestRouter))
+            GatewayService gatewayService = new GatewayService(requestRouter, broker);
+
+            broker.register(gatewayService, () -> new GatewayService(requestRouter, broker))
                 .addInterceptor(new LoggingInterceptor());
 
             if (protocol.equalsIgnoreCase("UDP")) {

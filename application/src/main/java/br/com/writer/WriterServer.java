@@ -46,7 +46,10 @@ public class WriterServer {
             }
 
             DictionaryStorage dictionary = new DictionaryStorage();
-            WriterRequestHandler writeHandler = new WriterRequestHandler(dictionary, membershipList);
+            Broker broker = Broker.createDefault()
+                .register(dictionary, () -> new DictionaryStorage())
+                .addInterceptor(new LoggingInterceptor());
+            WriterRequestHandler writeHandler = new WriterRequestHandler(dictionary, membershipList, broker);
 
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
@@ -70,10 +73,6 @@ public class WriterServer {
                 Executors.newSingleThreadScheduledExecutor());
             writeHandler.setGossipWorker(worker);
             writeHandler.setLocalNode(localNode);
-
-            Broker broker = Broker.createDefault()
-                .register(dictionary, () -> new DictionaryStorage())
-                .addInterceptor(new LoggingInterceptor());
 
             if (protocol.equalsIgnoreCase("UDP")) {
                 broker.useProtocol(new UdpPlugin());

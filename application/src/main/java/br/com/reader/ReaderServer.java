@@ -46,7 +46,10 @@ public class ReaderServer {
             }
 
             DictionaryStorage dictionary = new DictionaryStorage();
-            ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList);
+            Broker broker = Broker.createDefault()
+                .register(dictionary, () -> new DictionaryStorage())
+                .addInterceptor(new LoggingInterceptor());
+            ReadRequestHandler readHandler = new ReadRequestHandler(dictionary, membershipList, broker);
 
             TcpStrategy tcpStrategy = null;
             UdpStrategy udpStrategy = null;
@@ -70,10 +73,6 @@ public class ReaderServer {
                 Executors.newSingleThreadScheduledExecutor());
             readHandler.setGossipWorker(worker);
             readHandler.setLocalNode(localNode);
-
-            Broker broker = Broker.createDefault()
-                .register(dictionary, () -> new DictionaryStorage())
-                .addInterceptor(new LoggingInterceptor());
 
             if (protocol.equalsIgnoreCase("UDP")) {
                 broker.useProtocol(new UdpPlugin());

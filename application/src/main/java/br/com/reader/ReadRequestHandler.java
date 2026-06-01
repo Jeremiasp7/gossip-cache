@@ -9,6 +9,7 @@ import br.com.core.model.GossipMessage;
 import br.com.core.model.NodeInfo;
 import br.com.core.model.Operation;
 import br.com.core.model.RequestHandler;
+import br.com.middleware.core.Broker;
 
 public class ReadRequestHandler implements RequestHandler {
 
@@ -16,11 +17,14 @@ public class ReadRequestHandler implements RequestHandler {
     private MembershipList membershipList;
     private GossipWorker gossipWorker;
     private NodeInfo localNode;
+    private Broker broker;
 
     public ReadRequestHandler(DictionaryStorage storage,
-                              MembershipList membershipList) {
+                              MembershipList membershipList,
+                              Broker broker) {
         this.dictionaryStorage = storage;
         this.membershipList = membershipList;
+        this.broker = broker;
     }
 
     public void setGossipWorker(GossipWorker gossipWorker) {
@@ -37,16 +41,24 @@ public class ReadRequestHandler implements RequestHandler {
         System.out.printf("Reader processando %s para chave '%s'%n",
                 request.getOperation(), request.getKey());
 
-        if (request.getOperation() == Operation.GET) {
-            byte[] value = dictionaryStorage.searchData(request.getKey());
-            if (value == null) {
-                return new AppResponse("200", "".getBytes(),
-                        "Não encontrado (aguardando gossip)");
-            }
-            return new AppResponse("200", value, "OK");
-        }
+        try {
+            byte[] result = broker.invokeCacheOperation(
+                request.getOperation().toString(),
+                request.getKey(),
+                request.getValue());
 
-        return new AppResponse("405", null, "Method Not Allowed");
+            if (request.getOperation() == Operation.GET) {
+                if (result == null) {
+                    return new AppResponse("200", "".getBytes(),
+                            "Não encontrado (aguardando gossip)");
+                }
+                return new AppResponse("200", result, "OK");
+            }
+
+            return new AppResponse("200", null, "OK");
+        } catch (Exception e) {
+            return new AppResponse("500", null, "Erro ao processar requisição: " + e.getMessage());
+        }
     }
 
 
